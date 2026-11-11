@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b111b">
+  <meta name="description" content="생각과 일상을 기록하는 나만의 스마트메모">
+  <title>스마트메모 | theMemo</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+</head>
+<body x-data :class="{'focus-mode':$store.ui.focus,'drawer-open':$store.ui.drawer,'inspector-open':$store.ui.inspector,'keyboard-open':$store.ui.keyboard}" @keydown.escape.window="$store.ui.escape()">
+  <a class="skip-link" href="#document-title">본문으로 건너뛰기</a>
+  <script id="smartmemo-config" type="application/json">{"mode":"demo","storageKey":"theMemo-publishing-v1","assetBase":"./assets/"}</script>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-group">
+        <button class="icon-button mobile-menu" aria-label="메모장 탐색 열기" @click="$store.ui.drawer=true" :aria-expanded="$store.ui.drawer"><i data-lucide="panel-left"></i></button>
+        <a class="brand" href="#" data-action="home"><span class="brand-mark"><i data-lucide="notebook-pen"></i></span><span>theMemo</span><span class="brand-divider"></span><span class="brand-subtitle">스마트메모</span></a>
+      </div>
+      <nav class="view-switch" aria-label="보기 전환"><button data-view="editor" aria-current="page">작성</button><button data-view="blog">블로그 보기</button></nav>
+      <div class="header-actions"><button class="search-trigger" data-action="search"><i data-lucide="search"></i><span>메모 검색</span><kbd>Ctrl K</kbd></button><button class="avatar" data-action="help" aria-label="사용 안내">G</button></div>
+    </header>
+
+    <button class="drawer-backdrop" x-cloak x-show="$store.ui.drawer" @click="$store.ui.drawer=false" aria-label="탐색 메뉴 닫기"></button>
+    <aside class="sidebar" aria-label="메모 탐색" :inert="!$store.ui.drawer && $store.ui.mobile ? true : null">
+      <button class="button primary new-memo" data-action="new"><i data-lucide="plus"></i>새 메모</button>
+      <nav class="nav-main" aria-label="기록 분류">
+        <button class="nav-item" data-filter="today"><i data-lucide="calendar-days"></i><span>오늘의 기록</span></button>
+        <button class="nav-item" data-filter="all"><i data-lucide="files"></i><span>모든 메모</span><span class="nav-count" id="count-all">0</span></button>
+        <button class="nav-item" data-filter="favorites"><i data-lucide="star"></i><span>즐겨찾기</span><span class="nav-count" id="count-favorites">0</span></button>
+      </nav>
+      <div class="sidebar-section"><div class="section-label"><span>메모장</span><button class="icon-button small" data-action="add-notebook" aria-label="메모장 추가"><i data-lucide="plus"></i></button></div><nav id="notebook-list" aria-label="메모장 목록"></nav></div>
+      <div class="sidebar-section"><div class="section-label">태그</div><div class="tag-cloud" id="sidebar-tags"></div></div>
+      <div class="sidebar-bottom"><button class="nav-item" data-filter="trash"><i data-lucide="trash-2"></i><span>휴지통</span></button><button class="nav-item" data-action="settings"><i data-lucide="settings-2"></i><span>설정</span></button><div class="private-note"><i data-lucide="lock-keyhole"></i><span>나만의 비공개 공간</span></div><span class="demo-label" id="mode-label">퍼블리싱 데모 · 이 브라우저에 저장</span></div>
+    </aside>
+
+    <main class="workspace" id="workspace">
+      <section id="editor-view" class="view editor-view" aria-label="메모 작성">
+        <div class="document-actions">
+          <div class="breadcrumb"><i data-lucide="folder-open"></i><span>메모장</span><span class="breadcrumb-slash">/</span><button data-action="metadata" id="breadcrumb-notebook">일상 기록</button></div>
+          <div class="document-action-buttons"><span id="save-status" role="status" aria-live="polite" class="save-state"></span><span id="visibility-warning" class="visibility-warning" hidden>저장하면 누구나 이 글을 볼 수 있습니다</span><label class="visibility-control"><span>공개 범위:</span><select id="visibility-select" aria-label="공개 범위"><option value="private">나만 보기</option><option value="public">전체 공개</option></select></label><button id="image-import-retry" class="button secondary" data-action="retry-images" hidden>이미지 다시 가져오기</button><button id="conflict-export" class="button secondary" data-action="export" hidden>JSON 보관</button><button class="button ghost focus-toggle" @click="$store.ui.focus=!$store.ui.focus" :aria-pressed="$store.ui.focus" aria-label="집중 모드 전환"><i data-lucide="maximize-2"></i><span x-text="$store.ui.focus?'집중 종료':'집중 모드'"></span></button><button class="button secondary read-button" data-action="read"><i data-lucide="eye"></i><span>읽기</span></button><button class="button primary" data-action="save">저장</button></div>
+        </div>
+        <div class="editor-grid">
+          <div class="editor-main">
+            <div class="format-toolbar" role="toolbar" aria-label="본문 서식">
+              <div class="tool-group"><button class="tool" data-command="undo" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소"><i data-lucide="undo-2"></i></button><button class="tool" data-command="redo" title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행"><i data-lucide="redo-2"></i></button></div>
+              <div class="tool-group"><label class="sr-only" for="block-type">문단 종류</label><select id="block-type" class="tool-select"><option value="paragraph">본문</option><option value="h2">제목 1</option><option value="h3">제목 2</option><option value="h4">제목 3</option></select></div>
+              <div class="tool-group desktop-tools"><label class="sr-only" for="font-family">글꼴</label><select id="font-family" class="tool-select"><option value="">기본 글꼴</option><option value="serif">명조체</option><option value="monospace">고정폭</option></select><label class="sr-only" for="font-size">글자 크기</label><select id="font-size" class="tool-select size-select"><option value="14px">14</option><option value="17px" selected>17</option><option value="20px">20</option><option value="24px">24</option><option value="32px">32</option></select><label class="sr-only" for="line-height">줄간격</label><select id="line-height" class="tool-select" aria-label="줄간격"><option value="">기본 줄간격</option><option value="1">좁게</option><option value="1.5">보통</option><option value="2">넓게</option></select></div>
+              <div class="tool-group"><button class="tool" data-command="bold" aria-label="굵게" title="굵게 (Ctrl+B)"><strong>B</strong></button><button class="tool" data-command="italic" aria-label="기울임" title="기울임 (Ctrl+I)"><em>I</em></button><button class="tool" data-command="underline" aria-label="밑줄" title="밑줄 (Ctrl+U)"><u>U</u></button><button class="tool desktop-tools" data-command="strike" aria-label="취소선" title="취소선"><s>S</s></button></div>
+              <div class="tool-group color-tools"><label class="color-tool" title="글자색"><span>A</span><input id="text-color" type="color" value="#e8eef6" aria-label="글자색"></label><button class="tool" data-command="highlight" aria-label="형광펜" title="형광펜"><i data-lucide="highlighter"></i></button></div>
+              <div class="tool-group desktop-tools"><button class="tool" data-command="align" aria-label="문단 정렬 변경" title="문단 정렬 변경"><i data-lucide="align-left"></i></button><button class="tool" data-command="bulletList" aria-label="글머리 목록" title="글머리 목록"><i data-lucide="list"></i></button><button class="tool" data-command="taskList" aria-label="체크리스트" title="체크리스트"><i data-lucide="list-todo"></i></button></div>
+              <div class="tool-group"><button class="tool" data-action="link" aria-label="링크 넣기" title="링크 넣기 (Ctrl+Shift+K)"><i data-lucide="link"></i></button></div>
+              <button class="insert-trigger button ghost" data-action="insert"><i data-lucide="plus"></i><span>삽입</span><i data-lucide="chevron-down" class="tiny-icon"></i></button>
+              <button class="tool outline-toggle" @click="$store.ui.inspector=!$store.ui.inspector" :aria-pressed="$store.ui.inspector" aria-label="목차와 문서 정보"><i data-lucide="panel-right"></i></button>
+            </div>
+            <article class="document-sheet">
+              <div class="sheet-content">
+                <div class="sheet-options"><button data-action="cover"><i data-lucide="image-plus"></i>표지 추가</button><button data-action="icon"><i data-lucide="smile"></i>아이콘 추가</button></div>
+                <div id="cover-container" hidden></div>
+                <div class="journal-date"><button data-action="metadata" id="display-date"></button><button class="icon-button small" data-action="favorite" id="favorite-button" aria-label="즐겨찾기 추가"><i data-lucide="star"></i></button></div>
+                <div class="document-title-line"><span id="document-icon" hidden></span><textarea id="document-title" aria-label="메모 제목" placeholder="제목 없는 메모" rows="1" maxlength="200"></textarea></div>
+                <div class="document-tags"><button class="chip notebook-chip" data-action="metadata"><i data-lucide="folder"></i><span id="document-notebook">일상 기록</span></button><span id="document-tags"></span><button class="chip add-tag" data-action="tags"><i data-lucide="plus"></i>태그</button></div>
+                <div class="body-divider"></div>
+                <div class="editor-content-wrap"><button class="block-add" data-action="insert" aria-label="본문에 블록 추가" title="본문에 블록 추가"><i data-lucide="plus"></i></button><div id="editor" class="rich-content" x-ignore></div></div>
+              </div>
+              <footer class="document-status"><span id="footer-visibility">나만 보기</span><span id="character-count">0자 · 약 1분</span><span class="local-state" id="autosave-label">브라우저 자동 저장</span></footer>
+            </article>
+          </div>
+          <aside class="inspector" aria-label="목차와 문서 정보" x-cloak x-show="$store.ui.inspector">
+            <div class="inspector-title"><h2>목차</h2><button class="icon-button" @click="$store.ui.inspector=false" aria-label="목차 닫기"><i data-lucide="x"></i></button></div><nav id="outline" aria-label="문서 목차"></nav><p class="inspector-hint">제목을 누르면 해당 위치로 이동</p>
+            <section class="document-info"><h2>문서 정보</h2><dl><div><dt><i data-lucide="folder"></i>메모장</dt><dd id="info-notebook"></dd></div><div><dt><i data-lucide="lock-keyhole"></i>공개 범위</dt><dd id="info-visibility">나만 보기</dd></div><div><dt><i data-lucide="calendar-days"></i>기록일</dt><dd id="info-date"></dd></div><div><dt><i data-lucide="clock-3"></i>수정일</dt><dd id="info-modified"></dd></div></dl><button class="button secondary w-full" data-action="metadata">문서 정보 수정</button></section><p class="inspector-hint">목차와 정보는 접어둘 수 있어요.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="blog-view" class="view blog-view" hidden aria-labelledby="blog-heading">
+        <div class="blog-heading-row"><div><p class="eyebrow"><i data-lucide="lock-keyhole"></i>나만의 기록</p><h1 id="blog-heading">나의 이야기</h1><p class="blog-subtitle">소소한 순간부터 오래 남길 생각까지.</p></div><button class="button primary" data-action="new"><i data-lucide="plus"></i><span>새 메모</span></button></div>
+        <div class="blog-filters"><div class="filter-chips" id="blog-filters"></div><label class="month-picker"><i data-lucide="calendar-days"></i><span class="sr-only">기록 월</span><input type="month" id="month-filter" aria-label="기록 월"><button class="icon-button small" id="clear-month" aria-label="월 필터 해제" title="전체 기간"><i data-lucide="x"></i></button></label></div>
+        <div class="blog-search-row"><label class="search-field"><i data-lucide="search"></i><input id="blog-search" type="search" placeholder="제목, 내용, 태그로 찾아보세요" aria-label="메모 검색"></label><div class="feed-layout-switch" aria-label="목록 표시 방식"><button class="icon-button active" data-layout="feed" aria-label="블로그형 보기" aria-pressed="true"><i data-lucide="layout-list"></i></button><button class="icon-button" data-layout="compact" aria-label="간단 목록 보기" aria-pressed="false"><i data-lucide="list"></i></button></div></div>
+        <p id="results-summary" class="results-summary" role="status"></p><div id="blog-feed" class="blog-feed masonry-feed"></div><div class="feed-pagination"><p id="blog-page-status" role="status" aria-live="polite"></p><button class="button secondary" id="blog-load-more" type="button">더 보기</button><button class="button secondary" id="blog-retry" type="button" hidden>다시 시도</button><div id="blog-feed-sentinel" aria-hidden="true"></div></div>
+      </section>
+
+      <section id="reader-view" class="view reader-view" hidden aria-label="메모 읽기">
+        <div class="reader-actions"><button class="button ghost" data-action="back-blog"><i data-lucide="arrow-left"></i>목록으로</button><div class="flex items-center gap-2"><span class="private-badge"><i data-lucide="lock-keyhole"></i>나만 보기</span><button class="button secondary" data-action="export"><i data-lucide="download"></i><span>JSON 내보내기</span></button><button class="button primary" data-action="edit"><i data-lucide="square-pen"></i>수정</button></div></div>
+        <article class="reader-sheet"><div id="reader-cover"></div><p id="reader-date" class="reader-date"></p><h1 id="reader-title"></h1><div id="reader-tags" class="document-tags"></div><div class="body-divider"></div><div id="reader-content" class="rich-content" x-ignore></div><div class="reader-footer"><span id="reader-word-count"></span><button class="button ghost danger" data-action="delete"><i data-lucide="trash-2"></i>휴지통으로</button></div><nav class="adjacent-notes" id="adjacent-notes" aria-label="이전 다음 기록"></nav></article>
+      </section>
+      <p class="boot-error" id="boot-error" hidden role="alert"></p>
+    </main>
+    <nav class="mobile-nav" aria-label="모바일 탐색"><button data-view="editor"><i data-lucide="notebook-pen"></i>메모</button><button data-view="blog"><i data-lucide="book-open-text"></i>블로그</button><button data-action="search"><i data-lucide="search"></i>검색</button></nav>
+  </div>
+
+  <dialog id="insert-dialog" class="menu-dialog" aria-labelledby="insert-heading"><div class="dialog-heading"><h2 id="insert-heading">무엇을 기록할까요?</h2><button class="icon-button" data-close aria-label="삽입 메뉴 닫기"><i data-lucide="x"></i></button></div><p class="dialog-description">본문에서 / 를 입력해도 열 수 있어요.</p><label class="search-field"><i data-lucide="search"></i><input id="insert-search" type="search" placeholder="블록 찾기" aria-label="삽입할 블록 찾기"></label><div class="insert-grid" id="insert-items"></div></dialog>
+  <dialog id="link-dialog" aria-labelledby="link-heading"><form id="link-form"><div class="dialog-heading"><h2 id="link-heading">링크 넣기</h2><button class="icon-button" type="button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><label class="field-label" for="link-url">웹 주소</label><input class="text-input" id="link-url" type="url" placeholder="https://example.com" required><p class="dialog-description">http 또는 https 주소만 사용할 수 있어요.</p><div class="dialog-footer"><button class="button ghost" type="button" id="unlink-button">링크 해제</button><button class="button primary" type="submit">적용</button></div></form></dialog>
+  <dialog id="tags-dialog" aria-labelledby="tags-heading"><form id="tags-form"><div class="dialog-heading"><h2 id="tags-heading">태그 정리</h2><button class="icon-button" type="button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><label class="field-label" for="tags-input">쉼표로 태그를 구분해 주세요</label><input class="text-input" id="tags-input" maxlength="300" placeholder="일상, 생각, 개발"><p class="dialog-description">#은 생략해도 돼요. 최대 10개, 태그당 30자.</p><div class="dialog-footer"><button class="button primary" type="submit">적용</button></div></form></dialog>
+  <dialog id="metadata-dialog" aria-labelledby="metadata-heading"><form id="metadata-form"><div class="dialog-heading"><h2 id="metadata-heading">문서 정보</h2><button type="button" class="icon-button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><label class="field-label" for="meta-notebook">메모장</label><select class="text-input" id="meta-notebook"></select><label class="field-label" for="meta-date">기록 날짜</label><input class="text-input" type="date" id="meta-date" required><label class="setting-toggle"><input id="meta-private" type="checkbox" checked>나만 보기</label><p class="dialog-description" id="visibility-help">체크하면 이 글은 나만 볼 수 있습니다.</p><div class="dialog-footer"><button class="button primary" type="submit">적용</button></div></form></dialog>
+  <dialog id="notebook-dialog" aria-labelledby="notebook-heading"><form id="notebook-form"><div class="dialog-heading"><h2 id="notebook-heading">메모장 추가</h2><button type="button" class="icon-button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><label class="field-label" for="notebook-name">이름</label><input id="notebook-name" class="text-input" required maxlength="40" placeholder="예: 여행 기록"><div class="dialog-footer"><button class="button primary" type="submit">추가</button></div></form></dialog>
+  <dialog id="image-dialog" aria-labelledby="image-heading"><form id="image-form"><div class="dialog-heading"><h2 id="image-heading">사진에 설명 더하기</h2><button type="button" class="icon-button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><img id="image-preview" alt="선택한 사진 미리보기"><label class="field-label" for="image-alt">대체 텍스트</label><input id="image-alt" class="text-input" maxlength="300" placeholder="사진에 담긴 장면을 설명해 주세요"><label class="field-label" for="image-caption">사진 설명</label><input id="image-caption" class="text-input" maxlength="300" placeholder="기억하고 싶은 한 줄"><div class="dialog-footer"><button class="button primary" type="submit">사진 넣기</button></div></form></dialog>
+  <dialog id="help-dialog" aria-labelledby="help-heading"><div class="dialog-heading"><h2 id="help-heading">스마트메모 사용 안내</h2><button class="icon-button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><p class="dialog-description">이 퍼블리싱 데모는 메모를 현재 브라우저에 보관해요. 서버·기기 간 동기화와 로그인은 Django 연결 후 제공됩니다.</p><dl class="shortcuts"><div><dt>지금 저장</dt><dd>Ctrl / ⌘ + S</dd></div><div><dt>전체 검색</dt><dd>Ctrl / ⌘ + K</dd></div><div><dt>본문 링크</dt><dd>Ctrl / ⌘ + Shift + K</dd></div><div><dt>블록 삽입</dt><dd>빈 문단에서 /</dd></div><div><dt>굵게 · 기울임 · 밑줄</dt><dd>Ctrl / ⌘ + B · I · U</dd></div></dl><div class="dialog-footer"><button class="button primary" data-close>알겠어요</button></div></dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-heading"><form id="settings-form"><div class="dialog-heading"><h2 id="settings-heading">작성 환경</h2><button type="button" class="icon-button" data-close aria-label="닫기"><i data-lucide="x"></i></button></div><label class="field-label" for="body-size">기본 본문 크기</label><select id="body-size" class="text-input"><option value="17">17px · 기본</option><option value="19">19px · 크게</option><option value="21">21px · 더 크게</option></select><label class="setting-toggle"><input id="autosave-toggle" type="checkbox" checked>입력을 멈추면 자동 저장</label><p class="dialog-description">현재 브라우저의 설정이며 문서의 개별 글자 서식과는 별개예요.</p><div class="dialog-footer"><button class="button primary" type="submit">적용</button></div></form></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-heading"><div class="dialog-heading"><h2 id="confirm-heading">확인</h2></div><p id="confirm-message" class="dialog-description"></p><div class="dialog-footer"><button class="button secondary" id="confirm-cancel">취소</button><button class="button primary" id="confirm-accept">확인</button></div></dialog>
+  <div id="bubble-menu" class="bubble-menu" hidden><button class="tool" data-command="bold" aria-label="선택 글자 굵게"><strong>B</strong></button><button class="tool" data-command="italic" aria-label="선택 글자 기울임"><em>I</em></button><button class="tool" data-command="highlight" aria-label="선택 글자 강조"><i data-lucide="highlighter"></i></button><button class="tool" data-action="link" aria-label="선택 글자에 링크"><i data-lucide="link"></i></button></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <input id="image-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "public.html": {
+    "file": "assets/public-Cz2OG762.js",
+    "name": "public",
+    "src": "public.html",
+    "isEntry": true,
+    "css": [
+      "assets/public-Drc49mIo.css"
+    ]
+  }
+}

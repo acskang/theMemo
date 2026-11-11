@@ -1,0 +1,5 @@
+{% extends "registration/base.html" %}{% block title %}회원가입{% endblock %}{% block content %}
+<h1>회원가입</h1><p>나만의 메모 공간을 만드세요.</p><form method="post">{% csrf_token %}
+{% for field in form %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{{ field.errors }}</p>{% endfor %}
+<button class="primary" type="submit">계정 만들기</button></form><p class="links"><a href="{% url 'login' %}">로그인으로 돌아가기</a></p>
+{% endblock %}

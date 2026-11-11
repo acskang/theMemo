@@ -1,0 +1,27 @@
+.card-media,
+.card-media-link {
+  display: block;
+  padding: 23px 26px 0;
+}
+
+.card-media .card-photo,
+.card-media-link .card-photo {
+  margin-bottom: 0;
+}
+
+.masonry-feed .card-media,
+.masonry-feed .card-media-link {
+  padding: 0;
+}
+
+.blog-feed.compact .card-media,
+.blog-feed.compact .card-media-link {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .card-media,
+  .card-media-link {
+    padding: 12px 13px 0;
+  }
+}

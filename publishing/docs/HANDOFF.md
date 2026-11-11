@@ -1,0 +1,24 @@
+# Codex CLI 인수인계 — 먼저 이 문서만 읽기
+
+- 프로젝트: 스마트메모 / Django project package `theMemo` / `/home/cskang/ganzskang/theMemo` / `memo.thesysm.com`.
+- 승인된 UI를 `publishing/` 소스로 제공했다. 이미지에서 재설계하거나 다른 편집기로 교체하지 않는다.
+- **REA·네이버 분석은 종료됨. 재개하지 않는다.** 기존 연구 기록·기타 파일은 보존.
+- 구현 기술: Django Template + HTMX + Alpine.js + Tailwind v4 로컬 빌드, Tiptap 3.33.0.
+- 퍼블리싱은 작동하는 프런트엔드. Django 서버는 아직 없다.
+- 실행: `python -m http.server 8088 --bind 127.0.0.1 --directory publishing` → `/preview.html`.
+- 원본: `index.html`, `src/main.js`, `src/editor.js`, `src/adapters.js`, `src/styles.css`.
+- `src/sample-data.js`는 데모 fixture. Django mode에서는 BrowserAdapter가 실행되지 않아 샘플이 생성되지 않음.
+- 화면 state는 Alpine store에만, Tiptap 인스턴스는 Alpine proxy 밖에 둠.
+- `createAdapter(config)`가 저장 경계. Django 연결은 `mode:django`, `apiBase` 설정으로 전환.
+- `src/adapters.js`의 DjangoAdapter를 먼저 읽고 `docs/DJANGO_INTEGRATION.md`의 계약대로 서버 구현.
+- HTML/CSS/JS를 다시 작성하지 말고 static/template 경로·초기 데이터만 최소 연결.
+- 본문은 Tiptap JSON, `schema_version=1`. 읽기 역시 동일 스키마의 read-only Tiptap으로 표현. 임의 HTML `safe` 출력 금지.
+- 표·사진 캡션 등 스키마는 `src/editor.js` 기준. 공개 core/확장만 사용, Pro·Cloud 전제 없음.
+- 브라우저 데모: IndexedDB 저장, revision 비교, 저장 실패 시 현재 내용 유지, JSON 내보내기.
+- Django 모드: API 경계만 제공. 서버 인증·소유권·revision·이미지 검증을 새로 구현해야 함.
+- 기본 서비스는 본인 전용. 모든 note/notebook/image는 owner로 제한. 비공개는 문구가 아니라 서버에서 강제.
+- 확인된 자동 검증은 `docs/VERIFICATION.md`. 성공한 프런트엔드 검증을 이유 없이 반복·확대하지 않음.
+- 실제 브라우저 시각 검증 및 Android IME 실기기 검증은 미완료이며 별도 확인 대상.
+- 원본 npm lock 보존. `node_modules`, minified `dist`, 대형 사진·preview.html은 모델 문맥에 읽지 않음.
+- 기본 문서보다 실제 소스와 API 계약이 구체적이면 소스·계약을 우선. 충돌은 필요한 부분만 해결하고 보고.
+- 작업 완료 후 `docs/implementation-status.md`에 완료 범위·검증·남은 일·다음에 읽을 파일만 짧게 기록.

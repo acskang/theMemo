@@ -1,0 +1,23 @@
+# Python / Django
+__pycache__/
+*.pyc
+db.sqlite3
+*.sqlite3
+staticfiles/
+private-media/
+deploy/
+
+# 비밀값
+.env
+.env.*
+!.env.example
+*.pem
+
+# Node
+node_modules/
+
+# 백업·임시
+backups/
+*.bak
+*.bak-*
+.DS_Store
