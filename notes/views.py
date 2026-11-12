@@ -20,6 +20,13 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from .image_import import RemoteImageError, fetch_youtube_thumbnail
 from .models import MemoImage, Note, Notebook
+from .models import (
+    AppSetting,
+    MenuItem,
+    UIString,
+    BlogPost,
+    FeatureFlag,
+)
 from .validation import plain_text, validate_cover, validate_document
 
 
@@ -420,3 +427,92 @@ def _document_has_image(document, source):
     if document.get("type") == "image" and document.get("attrs", {}).get("src") == source:
         return True
     return any(_document_has_image(child, source) for child in document.get("content", []))
+
+
+# ---------------------------------------------------------------------------
+# Configuration API – returns UI strings, menus, settings and feature flags
+# ---------------------------------------------------------------------------
+
+@require_GET
+def app_config(request):
+    """Return a consolidated JSON payload used by the front‑end.
+
+    The structure matches the specification in the design document.  All
+    objects that have ``is_active=False`` are excluded.
+    """
+    ui_strings = UIString.objects.filter(is_active=True)
+    menus = MenuItem.objects.filter(is_active=True).select_related("parent")
+    settings = AppSetting.objects.filter(is_active=True)
+    flags = FeatureFlag.objects.all()
+
+    ui = {s.key: s.value for s in ui_strings}
+    menus_data = []
+    for m in menus:
+        menus_data.append(
+            {
+                "key": m.key,
+                "label": m.label,
+                "url": m.url,
+                "icon": m.icon,
+                "order": m.order,
+                "group": m.group,
+                "parent": m.parent_id,
+            }
+        )
+    settings_data = {s.key: s.value for s in settings}
+    flags_data = {f.key: f.is_active for f in flags}
+    return JsonResponse(
+        {
+            "ui_strings": ui,
+            "menus": menus_data,
+            "settings": settings_data,
+            "flags": flags_data,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Blog post API – list and detail views
+# ---------------------------------------------------------------------------
+
+def _blog_post_to_dict(post: BlogPost):
+    """Serialize a :class:`BlogPost` into a JSON‑serialisable dict."""
+    return {
+        "id": str(post.id),
+        "owner": post.owner.username,
+        "title": post.title,
+        "subtitle": post.subtitle,
+        "excerpt": post.excerpt,
+        "slug": post.slug,
+        "content": post.content,
+        "cover": post.cover,
+        "is_public": post.is_public,
+        "created_at": post.created_at.isoformat(),
+        "updated_at": post.updated_at.isoformat(),
+        "order": post.order,
+        "seo_title": post.seo_title,
+        "seo_description": post.seo_description,
+        "tags": post.tags,
+    }
+
+
+@require_GET
+def blog_posts_list(request):
+    """Return a list of public blog posts.
+
+    The endpoint is intentionally read‑only; no authentication is required.
+    Posts are ordered by ``-created_at`` followed by ``order`` so that newer
+    posts appear first.  Pagination can be added later if needed.
+    """
+    posts = BlogPost.objects.filter(is_public=True).order_by("-created_at", "order")
+    return JsonResponse({"items": [_blog_post_to_dict(p) for p in posts]})
+
+
+@require_GET
+def blog_post_detail(request, slug):
+    """Return a single public blog post identified by its slug."""
+    try:
+        post = BlogPost.objects.get(slug=slug, is_public=True)
+    except BlogPost.DoesNotExist:
+        return error("not_found", "게시물을 찾을 수 없습니다.", 404)
+    return JsonResponse(_blog_post_to_dict(post))

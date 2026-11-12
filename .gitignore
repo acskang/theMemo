@@ -21,3 +21,7 @@ backups/
 *.bak
 *.bak-*
 .DS_Store
+.env_prod
+db.sqlite3.*
+docs/*.json
+db.sqlite3.*

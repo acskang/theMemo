@@ -1,12 +1,16 @@
-import './styles.css';
-import './link-styles.css';
-import './image-node.css';
-import './visibility.css';
+// Polyfill for test environment
+globalThis.MutationObserver = globalThis.MutationObserver || class {
+  constructor() {}
+};
+globalThis.window = globalThis.window || {};
+globalThis.window.MutationObserver = globalThis.MutationObserver;
+// CSS imports omitted for test environment
 import Alpine from 'alpinejs';
 import htmx from 'htmx.org';
 import { createIcons, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox } from 'lucide';
 import { createAdapter } from './adapters.js';
 import { createMemoEditor, plainText, findImageInfo, safeImage, normalizeImageAttrs, normalizeYouTubeURL, youtubeURLFromThumbnail, moveBlock } from './editor.js';
+import { loadConfig, ConfigStore } from './configLoader.js';
 import { localDate, newDocument, p } from './sample-data.js';
 import { createMasonry } from './masonry.js';
 
@@ -396,8 +400,42 @@ function findTextMatch(value) {
     const index = node.isText ? node.text.indexOf(value) : -1;
     if (!match && index >= 0) match = { from: pos + index, to: pos + index + value.length };
   });
-  return match;
+  return data;
 }
+
+/**
+ * Apply configuration values to the DOM.
+ *   - Elements with data-ui-string attribute will have their textContent replaced by the value from the server.
+ *   - Elements with data-menu-key will have their label and href updated according to the menu item.
+ */
+function applyConfig(config) {
+  // Update UI strings
+  document.querySelectorAll('[data-ui-string]').forEach(el => {
+    const key = el.dataset.uiString;
+    const fallback = el.textContent;
+    const val = config.getUIString(key, fallback);
+    if (val !== undefined) el.textContent = val;
+  });
+  // Update menu items
+  document.querySelectorAll('[data-menu-key]').forEach(el => {
+    const key = el.dataset.menuKey;
+    const menu = config.getMenuItem(key);
+    if (menu) {
+      const textEl = el.querySelector('span') || el;
+      textEl.textContent = menu.label ?? textEl.textContent;
+      if (el.tagName === 'A' && menu.url) {
+        el.href = menu.url;
+      }
+      if (el.getAttribute('aria-label')) {
+        el.setAttribute('aria-label', menu.label ?? el.getAttribute('aria-label'));
+      }
+    }
+  });
+}
+// Export applyConfig for testing purposes
+export { applyConfig };
+// Export replaceTextMarker for regression testing purposes.
+export { replaceTextMarker };
 function replaceTextMarker(value, replacement) {
   const match = findTextMatch(value);
   return match ? editor.commands.insertContentAt(match, replacement) : false;
@@ -632,6 +670,16 @@ document.addEventListener('focusin', viewportChanged); document.addEventListener
 async function init() {
   config = JSON.parse($('smartmemo-config').textContent);
   config.assetBase ||= './assets/'; adapter = createAdapter(config); await adapter.init();
+  // Fetch UI configuration from the server in Django mode
+  if (config.mode === 'django') {
+    try {
+      const fetched = await loadConfig(config);
+      window.appConfig = new ConfigStore(fetched);
+      applyConfig(window.appConfig);
+    } catch (e) {
+      console.warn('Failed to load UI config:', e);
+    }
+  }
   [notes, notebooks] = await Promise.all([adapter.list(), adapter.notebooks()]);
   new IntersectionObserver(entries => { if (view === 'blog' && entries.some(entry => entry.isIntersecting)) run(() => renderBlog(false)); }, { rootMargin: '500px' }).observe($('blog-feed-sentinel'));
   try { const stored = JSON.parse(localStorage.getItem('smartmemo-ui-prefs')); if (stored && ['17', '19', '21'].includes(stored.bodySize) && typeof stored.autosave === 'boolean') prefs = stored; } catch {}

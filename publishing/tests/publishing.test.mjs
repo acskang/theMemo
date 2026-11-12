@@ -6,6 +6,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { createAdapter } from '../src/adapters.js';
 import { localDate, newDocument, sampleNotes } from '../src/sample-data.js';
 import { normalizeDestinationURL, normalizeImageAttrs, normalizeYouTubeURL, plainText, safeImage, youtubeURLFromThumbnail } from '../src/editor.js';
+import { replaceTextMarker } from '../src/main.js';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(fn, message) {
@@ -157,6 +158,29 @@ test('application: creation, genuine Tiptap formatting, save/reload, metadata, s
     assert.match(ctx.d.querySelector('#reader-content').innerHTML, /<strong>/);
     assert.equal(ctx.errors.length, 0, ctx.errors.join('\n'));
   } finally { ctx.close(); }
+});
+
+test('replaceTextMarker replaces marker with image node', async () => {
+  const ctx = await boot(new IDBFactory(), 'replaceMarkerTest');
+  try {
+    click(ctx, '[data-action="new"]');
+    await waitFor(() => ctx.d.querySelector('#document-title').value === '', 'title ready');
+    const marker = '⟦이미지 가져오기 대기 1⟧';
+    // Insert marker as plain text
+    paste(ctx, { text: marker });
+    // Ensure marker appears in editor
+    await waitFor(() => ctx.d.querySelector('#editor').textContent.includes(marker));
+    // Prepare dummy image node
+    const image = { type: 'image', attrs: { src: 'data:image/png;base64,AAA', alt: '', linkUrl: '' } };
+    replaceTextMarker(marker, image);
+    // Wait for replacement
+    await waitFor(() => !ctx.d.querySelector('#editor').textContent.includes(marker));
+    // Verify image node exists
+    const images = imageNodes(ctx.w.SmartMemo.getSnapshot().content);
+    assert.equal(images.length, 1);
+  } finally {
+    ctx.close();
+  }
 });
 
 test('application: table, image metadata, safe dialogs, blank search and new notebook', async () => {

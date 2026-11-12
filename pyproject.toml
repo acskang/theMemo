@@ -6,6 +6,7 @@ dependencies = [
   "Django==5.2.14",
   "gunicorn==23.0.0",
   "Pillow==12.2.0",
+  "python-dotenv>=1.2.4",
 ]
 
 [tool.uv]
