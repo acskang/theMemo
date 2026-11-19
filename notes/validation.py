@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 
 
 NODE_ATTRS = {
-    "doc": set(), "paragraph": {"textAlign"}, "text": set(), "heading": {"level", "textAlign"},
+    "doc": set(), "paragraph": {"textAlign", "lineHeight"}, "text": set(), "heading": {"level", "textAlign", "lineHeight"},
     "hardBreak": set(), "bulletList": set(), "orderedList": {"start", "type"}, "listItem": set(),
     "taskList": set(), "taskItem": {"checked"}, "blockquote": set(), "codeBlock": {"language"},
     "horizontalRule": set(), "image": {"src", "alt", "title", "caption", "width", "height", "linkUrl", "alignment"},
@@ -26,11 +26,15 @@ MARK_ATTRS = {
     # Standard formatting marks used by the editor.
     "link": {"href", "target", "rel", "class", "title"},
     "bold": set(),
+    "italic": set(),
+    "strike": set(),
+    "code": set(),
     "underline": set(),
     "textStyle": {"fontFamily", "fontSize", "color", "backgroundColor", "lineHeight"},
     "highlight": {"color"},
 }
 COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\([0-9., %]+\)|transparent)$")
+LINE_HEIGHT = re.compile(r"^(?:[12](?:\.\d{1,2})?|3(?:\.0{1,2})?)$")
 IMAGE_PATH = re.compile(r"^/memo-media/([0-9a-fA-F-]{36})/$")
 MAX_JSON_BYTES = 1_000_000
 MAX_NODES = 10_000
@@ -84,6 +88,10 @@ def _check_attrs(node_type, attrs):
         _fail("제목 단계가 올바르지 않습니다.")
     if "textAlign" in attrs and attrs["textAlign"] not in (None, "left", "center", "right", "justify"):
         _fail("문단 정렬이 올바르지 않습니다.")
+    if "lineHeight" in attrs and attrs["lineHeight"] is not None and (
+        not isinstance(attrs["lineHeight"], str) or not LINE_HEIGHT.fullmatch(attrs["lineHeight"])
+    ):
+        _fail("줄간격이 올바르지 않습니다.")
     if node_type == "taskItem" and not isinstance(attrs.get("checked"), bool):
         _fail()
     if node_type == "orderedList" and (not isinstance(attrs.get("start", 1), int) or not 1 <= attrs.get("start", 1) <= 100000):
@@ -130,13 +138,15 @@ def _check_mark(mark):
         if not valid_destination_url(attrs.get("href", "")) or attrs.get("target") not in (None, "_blank"):
             _fail("http 또는 https 링크만 사용할 수 있습니다.")
     if mark["type"] == "textStyle":
+        # 외부(예: Gemini)에서 붙여넣은 인라인 스타일(font-size:16px, 임의 폰트, oklch 색상 등)이
+        # 허용 목록 밖이면 문서 전체를 거부하지 않고 해당 속성만 제거한다.
         allowed = {"fontFamily": {None, "", "serif", "monospace"}, "fontSize": {None, "", "14px", "17px", "20px", "24px", "32px"}, "lineHeight": {None, "", "1", "1.5", "2"}}
         for key, values in allowed.items():
-            if key in attrs and attrs[key] not in values:
-                _fail()
+            if key in attrs and (not isinstance(attrs[key], str) and attrs[key] is not None or attrs[key] not in values):
+                del attrs[key]
         for key in ("color", "backgroundColor"):
             if attrs.get(key) not in (None, "") and (not isinstance(attrs[key], str) or not COLOR.fullmatch(attrs[key])):
-                _fail()
+                del attrs[key]
     if mark["type"] == "highlight" and attrs.get("color") is not None and (not isinstance(attrs["color"], str) or not COLOR.fullmatch(attrs["color"])):
         _fail()
 
