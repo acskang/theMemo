@@ -7,7 +7,7 @@
     "build": "vite build && PUBLIC_BUILD=1 vite build && node scripts/build-preview.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "check": "node --check src/main.js && node --check src/adapters.js && node --check src/editor.js",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --import ./tests/register-css-loader.mjs --test tests/*.test.mjs"
   },
   "keywords": [],
   "author": "",

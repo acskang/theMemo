@@ -54,6 +54,6 @@ MEDIA_ROOT = BASE_DIR / "private-media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "memo-app"
-LOGOUT_REDIRECT_URL = "public-blog"
+LOGOUT_REDIRECT_URL = "landing"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024

@@ -1,0 +1,8 @@
+{% extends "backoffice/base.html" %}{% block title %}이미지 정리{% endblock %}{% block content %}
+<div class="heading"><div><h1>미사용 이미지 정리</h1><div class="muted">메모와 블로그 글에서 참조하지 않는 이미지 {{ images|length }}개</div></div></div>
+<p class="explain">휴지통의 메모도 복구할 수 있도록 참조 이미지로 계산합니다. 파일 삭제는 되돌릴 수 없습니다. 파일이 없는 이미지 레코드도 이 목록에서 정리할 수 있습니다.</p>
+<form method="post" data-confirm="선택한 미사용 이미지 파일과 레코드를 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.">{% csrf_token %}<div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="전체 선택"></th><th>파일 / 이름</th><th>업로더</th><th>저장 위치</th><th>파일 상태</th><th>크기</th></tr></thead><tbody>
+{% for image in images %}<tr><td><input type="checkbox" name="selected" value="{{ image.key }}" aria-label="{{ image.name }} 선택"></td><td class="image-name"><strong>{{ image.name }}</strong>{% if image.kind == 'record' %}<small>{{ image.owner }} · {{ image.id }}</small>{% else %}<small>DB 레코드 없이 스토리지에 남은 파일 · {{ image.id }}</small>{% endif %}</td><td>{{ image.owner }}</td><td class="image-name">{{ image.path }}</td><td>{% if image.exists %}<span class="badge public">파일 있음</span>{% else %}<span class="badge trash">파일 없음 (레코드만)</span>{% endif %}</td><td class="size">{{ image.size|filesizeformat }}</td></tr>
+{% empty %}<tr><td colspan="6" class="empty">정리할 미사용 이미지가 없습니다.</td></tr>{% endfor %}
+</tbody></table></div><div class="bulkbar"><strong>선택한 이미지:</strong><button class="button danger">파일과 레코드 영구 삭제</button><span class="muted">선택하지 않은 항목은 그대로 둡니다.</span></div></form>
+{% endblock %}

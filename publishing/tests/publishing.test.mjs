@@ -6,7 +6,6 @@ import { IDBFactory } from 'fake-indexeddb';
 import { createAdapter } from '../src/adapters.js';
 import { localDate, newDocument, sampleNotes } from '../src/sample-data.js';
 import { normalizeDestinationURL, normalizeImageAttrs, normalizeYouTubeURL, plainText, safeImage, youtubeURLFromThumbnail } from '../src/editor.js';
-import { replaceTextMarker } from '../src/main.js';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(fn, message) {
@@ -21,8 +20,34 @@ async function boot(database = new IDBFactory(), storageKey = 'smoke') {
   const vc = new VirtualConsole();
   vc.on('jsdomError', error => { if (!/navigation|Not implemented.*scroll|stylesheet/i.test(error.message)) errors.push(error.message); });
   vc.on('error', error => errors.push(error?.message || String(error)));
+  // Define a minimal Element constructor before jsdom creates the window so
+  // that Alpine.js sees a valid `window.Element` during module evaluation.
+  globalThis.Element = function() {};
   const dom = new JSDOM(html, { url: 'https://memo.test/', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc });
   const w = dom.window;
+  // Extend the jsdom document with missing APIs expected by htmx and
+  // other libraries.
+  // Provide a global `document` that proxies the jsdom document and supplies
+  // the missing `createExpression` method required by htmx.
+  globalThis.document = new Proxy(w.document, {
+    get(target, prop) {
+      if (prop === 'createExpression') return () => ({ evaluate: () => [] });
+      return target[prop];
+    }
+  });
+  globalThis.document = w.document;
+  // jsdom in this environment may not expose the Element constructor, which
+  // Alpine.js expects to exist when the bundled script is evaluated.
+  // Polyfill Element if it is missing to prevent runtime errors during test
+  // bootstrapping.  The stub provides a minimal constructor and empty
+  // prototype so that Alpine's assignments (e.g. `_x_toggleAndCascadeWithTransitions`)
+  // succeed without affecting other DOM interactions used in the tests.
+  if (typeof w.Element !== 'function') {
+    w.Element = function () {};
+  }
+  if (!w.Element.prototype) {
+    w.Element.prototype = {};
+  }
   w.HTMLDialogElement.prototype.showModal = function() { this.open = true; };
   w.HTMLDialogElement.prototype.close = function() { this.open = false; this.dispatchEvent(new w.Event('close')); };
   w.indexedDB = database; w.structuredClone = structuredClone; w.scrollTo = () => {};
@@ -35,7 +60,16 @@ async function boot(database = new IDBFactory(), storageKey = 'smoke') {
   const evaluate = w.XPathExpression.prototype.evaluate;
   w.XPathExpression.prototype.evaluate = function(context, type, result) { return evaluate.call(this, context, type ?? 0, result ?? null); };
   const file = readdirSync(new URL('../dist/assets', import.meta.url)).find(name => name.endsWith('.js'));
-  w.eval('(function(){' + readFileSync(new URL(`../dist/assets/${file}`, import.meta.url), 'utf8') + '\n})();');
+  // Prepend a safe Element constructor so Alpine.js can attach its helper
+  // functions without throwing when running in jsdom environments that
+  // expose an undefined `window.Element`. This guard is local to the eval
+  // invocation and does not affect production builds.
+  w.eval(`(function(){
+    if (typeof window.Element !== "function") {
+      Object.defineProperty(window, 'Element', { value: function() {}, writable: true, configurable: true });
+    }
+    ${readFileSync(new URL(`../dist/assets/${file}`, import.meta.url), 'utf8')}
+  })();`);
   await waitFor(() => w.document.body.dataset.ready || !w.document.getElementById('boot-error').hidden, 'app did not boot');
   assert.equal(w.document.getElementById('boot-error').hidden, true, w.document.getElementById('boot-error').textContent);
   return { dom, w, d: w.document, errors, close() { w.SmartMemo.destroy(); dom.window.close(); } };
@@ -119,9 +153,10 @@ test('application: creation, genuine Tiptap formatting, save/reload, metadata, s
     pm.dispatch(pm.state.tr.setSelection(TextSelection.create(pm.state.doc, from, to)));
     click(ctx, '[data-command="bold"]');
     assert.match(ctx.d.querySelector('#editor').innerHTML, /<strong>/);
-    const lineHeight = ctx.d.querySelector('#line-height'); lineHeight.value = '2'; lineHeight.dispatchEvent(new ctx.w.Event('change', { bubbles: true }));
-    const styledText = documentTextNodes(ctx.w.SmartMemo.getSnapshot().content).find(node => node.text.includes('한글 입력과 저장 확인'));
-    assert.equal(styledText.marks.find(mark => mark.type === 'textStyle').attrs.lineHeight, '2');
+    click(ctx, '#line-height-button'); click(ctx, '[data-line-height="2"]');
+    // 줄간격은 이제 텍스트 마크가 아니라 문단/제목 블록 속성이다.
+    const blocks = []; (function collect(node) { if (['paragraph', 'heading'].includes(node?.type)) blocks.push(node); (node?.content || []).forEach(collect); })(ctx.w.SmartMemo.getSnapshot().content);
+    assert.ok(blocks.some(node => node.attrs?.lineHeight === '2'));
     click(ctx, '[data-action="tags"]');
     await waitFor(() => ctx.d.querySelector('#tags-dialog').open);
     fill(ctx, '#tags-input', '검증, 한글, 검증'); submit(ctx, '#tags-form');
@@ -172,12 +207,30 @@ test('replaceTextMarker replaces marker with image node', async () => {
     await waitFor(() => ctx.d.querySelector('#editor').textContent.includes(marker));
     // Prepare dummy image node
     const image = { type: 'image', attrs: { src: 'data:image/png;base64,AAA', alt: '', linkUrl: '' } };
-    replaceTextMarker(marker, image);
+    ctx.w.SmartMemo.replaceTextMarker(marker, image);
     // Wait for replacement
     await waitFor(() => !ctx.d.querySelector('#editor').textContent.includes(marker));
     // Verify image node exists
     const images = imageNodes(ctx.w.SmartMemo.getSnapshot().content);
     assert.equal(images.length, 1);
+  } finally {
+    ctx.close();
+  }
+});
+
+test('browser HTML paste uses the editor transaction pipeline and preserves supported marks', async () => {
+  const ctx = await boot(new IDBFactory(), 'html-paste-test');
+  try {
+    click(ctx, '[data-action="new"]');
+    await waitFor(() => ctx.d.querySelector('#document-title').value === '', 'title ready');
+    paste(ctx, { html: '<p><em>기울임</em> <s>취소선</s> <code>코드</code></p>', text: '기울임 취소선 코드' });
+    await waitFor(() => ctx.d.querySelector('#editor').textContent.includes('기울임'), 'pasted text');
+    const marks = documentTextNodes(ctx.w.SmartMemo.getSnapshot().content).flatMap(node => node.marks || []).map(mark => mark.type);
+    assert.ok(marks.includes('italic'));
+    assert.ok(marks.includes('strike'));
+    assert.ok(marks.includes('code'));
+    assert.equal(await ctx.w.SmartMemo.flush(), true);
+    assert.equal(ctx.errors.length, 0, ctx.errors.join('\n'));
   } finally {
     ctx.close();
   }
@@ -204,6 +257,14 @@ test('application: table, image metadata, safe dialogs, blank search and new not
     const imageBlock = ctx.d.querySelector('#editor figure[data-memo-image]');
     imageBlock.click();
     assert.ok(imageBlock.classList.contains('is-selected'));
+    assert.ok(imageBlock.querySelector('.memo-image-toolbar').checkVisibility ? !imageBlock.querySelector('.memo-image-toolbar').checkVisibility() : !imageBlock.classList.contains('is-editing'));
+    assert.equal(ctx.d.querySelector('#image-edit-button').disabled, false);
+    click(ctx, '#image-edit-button'); await delay(0);
+    assert.ok(imageBlock.classList.contains('is-editing'));
+    click(ctx, '#image-edit-button'); await delay(0);
+    assert.equal(imageBlock.classList.contains('is-editing'), false);
+    click(ctx, '#image-edit-button'); await delay(0);
+    assert.ok(imageBlock.classList.contains('is-editing'));
     const caption = imageBlock.querySelector('.memo-image-caption');
     caption.dispatchEvent(new ctx.w.CompositionEvent('compositionstart', { bubbles: true, data: '한' }));
     caption.textContent = '한글 캡션 수정';
@@ -211,7 +272,9 @@ test('application: table, image metadata, safe dialogs, blank search and new not
     caption.dispatchEvent(new ctx.w.CompositionEvent('compositionend', { bubbles: true, data: '글' }));
     click(ctx, '[data-image-action="align-right"]');
     fill(ctx, '.memo-image-toolbar input[type="number"]', '420');
-    ctx.d.querySelector('.memo-image-toolbar input[type="number"]').dispatchEvent(new ctx.w.Event('change', { bubbles: true }));
+    ctx.d.querySelector('.memo-image-toolbar input[type="number"]').dispatchEvent(new ctx.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    assert.equal(imageBlock.classList.contains('is-editing'), false);
+    click(ctx, '#image-edit-button'); await delay(0);
     click(ctx, '[data-image-action="link"]');
     fill(ctx, '.memo-image-link-popover input', 'https://example.com/video?q=1');
     submit(ctx, '.memo-image-link-popover');

@@ -1,8 +1,10 @@
 import json
+import logging
 import base64
 from datetime import date
 from functools import wraps
 from pathlib import Path
+from urllib.parse import quote
 from uuid import UUID
 
 from PIL import Image, UnidentifiedImageError
@@ -19,7 +21,19 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .image_import import RemoteImageError, fetch_youtube_thumbnail
-from .models import MemoImage, Note, Notebook
+from .models import MemoFile, MemoImage, Note, Notebook
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+IMAGE_NAME_MAX = 255
+
+def normalize_image_name(value):
+    if not isinstance(value, str):
+        return None
+    cleaned = "".join(ch for ch in " ".join(value.split()) if ch.isprintable()).strip()
+    return cleaned if 0 < len(cleaned) <= IMAGE_NAME_MAX else None
 from .models import (
     AppSetting,
     MenuItem,
@@ -28,6 +42,8 @@ from .models import (
     FeatureFlag,
 )
 from .validation import plain_text, validate_cover, validate_document
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_NOTEBOOKS = ("일상 기록", "개발 노트", "아이디어", "읽고 배운 것")
@@ -47,6 +63,8 @@ def api_login_required(view):
 
 
 def ensure_notebooks(owner):
+    if Notebook.objects.filter(owner=owner).exists():
+        return
     for name in DEFAULT_NOTEBOOKS:
         Notebook.objects.get_or_create(owner=owner, name=name)
 
@@ -175,6 +193,12 @@ def first_image_src(document):
 
 
 @require_GET
+def landing(request):
+    """memo.thesysm.com 첫 화면(홍보용 원페이지). 로그인하면 /memo/ 로 이동한다."""
+    return render(request, "landing/home.html")
+
+
+@require_GET
 def public_blog(request):
     page = _card_page(request, public=True)
     script, styles = public_manifest_entry()
@@ -243,7 +267,6 @@ def note_cards(request):
 @api_login_required
 def note_save(request, note_id):
     # Debug: check authentication status
-    print("note_save called, user authenticated:", request.user.is_authenticated, "user:", getattr(request.user, 'username', None))
     if request.method == "GET":
         # Return the note if it exists for the authenticated user.
         try:
@@ -355,6 +378,67 @@ def notebook_create(request):
         return error("duplicate_notebook", "같은 이름의 메모장이 있습니다.", 409)
     return JsonResponse(notebook_json(item), status=201)
 
+# ---------------------------------------------------------------------------
+# Notebook manipulation endpoints
+# ---------------------------------------------------------------------------
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_notebook(request, notebook_id):
+    """Move notes to the default notebook, then delete the requested notebook."""
+    with transaction.atomic():
+        notebook = get_object_or_404(
+            Notebook.objects.select_for_update(), pk=notebook_id, owner=request.user
+        )
+        if notebook.name == "일상 기록":
+            return Response(
+                {"detail": "기본 메모장인 일상 기록은 삭제할 수 없습니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        default_notebook, _ = Notebook.objects.get_or_create(owner=request.user, name="일상 기록")
+        moved_count = Note.objects.filter(owner=request.user, notebook=notebook).update(
+            notebook=default_notebook
+        )
+        notebook.delete()
+    return Response({
+        "deleted_id": str(notebook_id),
+        "fallback_notebook": notebook_json(default_notebook),
+        "moved_count": moved_count,
+    })
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def rename_notebook(request, notebook_id):
+    """Rename a notebook.
+
+    The request body must contain a JSON object with a single ``name`` key.
+    The view accepts any authenticated user and will reject attempts to
+    rename a notebook owned by another user with a 404 response.
+    """
+    notebook = get_object_or_404(Notebook, pk=notebook_id, owner=request.user)
+    # ``request.data`` is guaranteed to be parsed by DRF for JSON payloads.
+    new_name = request.data.get("name")
+    if not isinstance(new_name, str):
+        return Response({"detail": "이름이 올바르지 않습니다."}, status=status.HTTP_400_BAD_REQUEST)
+    new_name_stripped = new_name.strip()
+    if not new_name_stripped:
+        return Response({"detail": "이름은 비어 있을 수 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
+    max_len = Notebook._meta.get_field("name").max_length
+    if len(new_name_stripped) > max_len:
+        return Response({"detail": f"이름은 {max_len}자 이하여야 합니다."}, status=status.HTTP_400_BAD_REQUEST)
+    if notebook.name == new_name_stripped:
+        return Response({"id": str(notebook.id), "name": notebook.name})
+    if Notebook.objects.filter(owner=request.user, name=new_name_stripped).exclude(pk=notebook.pk).exists():
+        return Response({"detail": "같은 이름의 메모장이 이미 존재합니다."}, status=status.HTTP_400_BAD_REQUEST)
+    notebook.name = new_name_stripped
+    try:
+        with transaction.atomic():
+            notebook.save(update_fields=["name"])
+    except IntegrityError:
+        return Response({"detail": "같은 이름의 메모장이 이미 존재합니다."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"id": str(notebook.id), "name": notebook.name})
+
 
 @require_POST
 @api_login_required
@@ -383,6 +467,27 @@ def image_upload(request):
     return JsonResponse({"id": str(item.id), "url": f"/memo-media/{item.id}/", "original_name": item.original_name}, status=201)
 
 
+@require_http_methods(["GET", "PATCH"])
+@api_login_required
+def image_detail(request, image_id):
+    try:
+        item = MemoImage.objects.get(id=image_id, owner=request.user)
+    except MemoImage.DoesNotExist:
+        return error("not_found", "이미지를 찾을 수 없습니다.", 404)
+    if request.method == "PATCH":
+        try:
+            data = json.loads(request.body)
+            raw_name = data.get("name")
+        except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+            return error("invalid_json", "JSON 요청 형식이 올바르지 않습니다.")
+        name = normalize_image_name(raw_name)
+        if name is None:
+            return error("invalid_image_name", "이미지 이름은 1~255자로 입력해 주세요.")
+        item.original_name = name
+        item.save(update_fields=["original_name"])
+    return JsonResponse({"id": str(item.id), "url": f"/memo-media/{item.id}/", "original_name": item.original_name})
+
+
 @require_POST
 @api_login_required
 def image_import(request):
@@ -396,6 +501,7 @@ def image_import(request):
     try:
         image_data, content_type, suffix = fetch_youtube_thumbnail(source_url)
     except RemoteImageError as exc:
+        logger.warning("image import rejected: %s url=%s cause=%r", exc, source_url[:300], exc.__cause__)
         return error("image_import_failed", str(exc))
     item = MemoImage(owner=request.user, original_name=f"youtube-thumbnail{suffix}", content_type=content_type)
     item.file.save(f"youtube-thumbnail{suffix}", ContentFile(image_data), save=True)
@@ -421,6 +527,64 @@ def image_serve(request, image_id):
     return response
 
 
+ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024
+# 문서·압축·텍스트류만 허용한다. 실행파일/스크립트/HTML/SVG 등은 차단한다.
+ATTACHMENT_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".hwp", ".hwpx", ".txt", ".csv", ".md",
+    ".rtf", ".odt", ".ods", ".odp", ".zip", ".7z",
+}
+
+
+def _ascii_filename_fallback(name):
+    return "".join(ch if ch.isascii() and ch.isprintable() and ch not in '"\\/;' else "_" for ch in name) or "download"
+
+
+@require_POST
+@api_login_required
+def file_upload(request):
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        return error("missing_file", "첨부할 파일을 선택해 주세요.")
+    if uploaded.size > ATTACHMENT_MAX_BYTES:
+        return error("file_too_large", "첨부파일은 20MB 이하여야 합니다.", 413)
+    if uploaded.size == 0:
+        return error("empty_file", "빈 파일은 첨부할 수 없습니다.")
+    name = Path(uploaded.name).name.replace("\x00", "").strip()[:255]
+    suffix = Path(name).suffix.lower()
+    if not name or suffix not in ATTACHMENT_EXTENSIONS:
+        return error("unsupported_file", "PDF, 문서, 스프레드시트, 프레젠테이션, 텍스트, 압축 파일만 첨부할 수 있습니다.")
+    item = MemoFile(owner=request.user, original_name=name, content_type="application/octet-stream", size=uploaded.size)
+    item.file.save(f"upload{suffix}", uploaded, save=True)
+    return JsonResponse({"id": str(item.id), "name": item.original_name, "size": item.size, "url": f"/memo-files/{item.id}/"}, status=201)
+
+
+@require_GET
+def file_serve(request, file_id):
+    try:
+        item = MemoFile.objects.get(id=file_id)
+    except MemoFile.DoesNotExist:
+        return error("not_found", "첨부파일을 찾을 수 없습니다.", 404)
+    allowed = request.user.is_authenticated and item.owner_id == request.user.id
+    if not allowed:
+        allowed = any(_document_has_file(note.content, str(item.id)) for note in public_notes().filter(owner=item.owner))
+    if not allowed:
+        return error("not_found", "첨부파일을 찾을 수 없습니다.", 404)
+    response = FileResponse(item.file.open("rb"), content_type="application/octet-stream")
+    fallback = _ascii_filename_fallback(item.original_name)
+    response["Content-Disposition"] = f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(item.original_name)}"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def _document_has_file(document, file_id):
+    if not isinstance(document, dict):
+        return False
+    if document.get("type") == "fileAttachment" and str(document.get("attrs", {}).get("id", "")).lower() == file_id:
+        return True
+    return any(_document_has_file(child, file_id) for child in document.get("content", []))
+
+
 def _document_has_image(document, source):
     if not isinstance(document, dict):
         return False
@@ -435,7 +599,7 @@ def _document_has_image(document, source):
 
 @require_GET
 def app_config(request):
-    """Return a consolidated JSON payload used by the front‑end.
+    """Return a consolidated JSON payload used by the front-end.
 
     The structure matches the specification in the design document.  All
     objects that have ``is_active=False`` are excluded.
@@ -476,7 +640,7 @@ def app_config(request):
 # ---------------------------------------------------------------------------
 
 def _blog_post_to_dict(post: BlogPost):
-    """Serialize a :class:`BlogPost` into a JSON‑serialisable dict."""
+    """Serialize a :class:`BlogPost` into a JSON-serialisable dict."""
     return {
         "id": str(post.id),
         "owner": post.owner.username,
@@ -500,7 +664,7 @@ def _blog_post_to_dict(post: BlogPost):
 def blog_posts_list(request):
     """Return a list of public blog posts.
 
-    The endpoint is intentionally read‑only; no authentication is required.
+    The endpoint is intentionally read-only; no authentication is required.
     Posts are ordered by ``-created_at`` followed by ``order`` so that newer
     posts appear first.  Pagination can be added later if needed.
     """

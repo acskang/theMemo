@@ -10,7 +10,8 @@ NODE_ATTRS = {
     "doc": set(), "paragraph": {"textAlign", "lineHeight"}, "text": set(), "heading": {"level", "textAlign", "lineHeight"},
     "hardBreak": set(), "bulletList": set(), "orderedList": {"start", "type"}, "listItem": set(),
     "taskList": set(), "taskItem": {"checked"}, "blockquote": set(), "codeBlock": {"language"},
-    "horizontalRule": set(), "image": {"src", "alt", "title", "caption", "width", "height", "linkUrl", "alignment"},
+    "horizontalRule": set(), "fileAttachment": {"id", "name", "size"},
+    "image": {"src", "alt", "title", "caption", "width", "height", "linkUrl", "alignment"},
     "table": {"style"}, "tableRow": set(), "tableHeader": {"colspan", "rowspan", "colwidth", "style", "align"},
     "tableCell": {"colspan", "rowspan", "colwidth", "style", "align"},
 }
@@ -34,7 +35,9 @@ MARK_ATTRS = {
     "highlight": {"color"},
 }
 COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\([0-9., %]+\)|transparent)$")
+FONT_SIZE = re.compile(r"^\d{1,3}px$")
 LINE_HEIGHT = re.compile(r"^(?:[12](?:\.\d{1,2})?|3(?:\.0{1,2})?)$")
+ATTACHMENT_ID = re.compile(r"^[0-9a-fA-F-]{36}$")
 IMAGE_PATH = re.compile(r"^/memo-media/([0-9a-fA-F-]{36})/$")
 MAX_JSON_BYTES = 1_000_000
 MAX_NODES = 10_000
@@ -103,6 +106,14 @@ def _check_attrs(node_type, attrs):
             _fail()
         if attrs.get("align") not in (None, "left", "center", "right", "justify"):
             _fail("표 셀 정렬이 올바르지 않습니다.")
+    if node_type == "fileAttachment":
+        file_id, name, size = attrs.get("id"), attrs.get("name"), attrs.get("size")
+        if not isinstance(file_id, str) or not ATTACHMENT_ID.fullmatch(file_id):
+            _fail("첨부파일 정보가 올바르지 않습니다.")
+        if not isinstance(name, str) or not 1 <= len(name) <= 255:
+            _fail("첨부파일 이름이 올바르지 않습니다.")
+        if isinstance(size, bool) or not isinstance(size, int) or not 0 <= size <= 100 * 1024 * 1024:
+            _fail("첨부파일 크기가 올바르지 않습니다.")
     if node_type == "image":
         # ``alt`` is optional.  The original validator only allowed a
         # string; however the front‑end occasionally sends a boolean
@@ -140,7 +151,10 @@ def _check_mark(mark):
     if mark["type"] == "textStyle":
         # 외부(예: Gemini)에서 붙여넣은 인라인 스타일(font-size:16px, 임의 폰트, oklch 색상 등)이
         # 허용 목록 밖이면 문서 전체를 거부하지 않고 해당 속성만 제거한다.
-        allowed = {"fontFamily": {None, "", "serif", "monospace"}, "fontSize": {None, "", "14px", "17px", "20px", "24px", "32px"}, "lineHeight": {None, "", "1", "1.5", "2"}}
+        allowed = {"fontFamily": {None, "", "serif", "monospace"}, "lineHeight": {None, "", "1", "1.5", "2"}}
+        size = attrs.get("fontSize")
+        if "fontSize" in attrs and size not in (None, "") and not (isinstance(size, str) and FONT_SIZE.fullmatch(size) and 8 <= int(size[:-2]) <= 96):
+            del attrs["fontSize"]
         for key, values in allowed.items():
             if key in attrs and (not isinstance(attrs[key], str) and attrs[key] is not None or attrs[key] not in values):
                 del attrs[key]
@@ -166,6 +180,7 @@ def validate_document(document, owner):
     if size > MAX_JSON_BYTES or not isinstance(document, dict) or document.get("type") != "doc":
         _fail("문서가 너무 크거나 형식이 올바르지 않습니다.")
     image_ids = set()
+    file_ids = set()
     count = 0
 
     def walk(node, depth=0):
@@ -192,6 +207,11 @@ def validate_document(document, owner):
             _fail()
         for child in content:
             walk(child, depth + 1)
+        if node_type == "fileAttachment":
+            try:
+                file_ids.add(UUID(node["attrs"]["id"]))
+            except (KeyError, ValueError):
+                _fail("첨부파일 정보가 올바르지 않습니다.")
         if node_type == "image":
             match = IMAGE_PATH.fullmatch(node.get("attrs", {}).get("src", ""))
             if not match:
@@ -199,7 +219,9 @@ def validate_document(document, owner):
             image_ids.add(UUID(match.group(1)))
 
     walk(document)
-    from .models import MemoImage
+    from .models import MemoFile, MemoImage
+    if file_ids and MemoFile.objects.filter(owner=owner, id__in=file_ids).count() != len(file_ids):
+        _fail("본인이 업로드한 첨부파일만 사용할 수 있습니다.")
     if image_ids and MemoImage.objects.filter(owner=owner, id__in=image_ids).count() != len(image_ids):
         _fail("본인이 업로드한 이미지만 사용할 수 있습니다.")
 
@@ -217,10 +239,12 @@ def validate_cover(cover, owner):
 
 def plain_text(document):
     parts = []
-    block_types = {"paragraph", "heading", "listItem", "taskItem", "blockquote", "codeBlock"}
+    block_types = {"paragraph", "heading", "listItem", "taskItem", "blockquote", "codeBlock", "fileAttachment"}
     def walk(node):
         if node.get("type") == "text":
             parts.append(node.get("text", ""))
+        if node.get("type") == "fileAttachment":
+            parts.append(str(node.get("attrs", {}).get("name", "")))
         if node.get("type") == "hardBreak":
             parts.append("\n")
         for child in node.get("content", []):

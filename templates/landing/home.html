@@ -1,0 +1,502 @@
+{% load static %}<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>더시스템아이디어스 — 엔터프라이즈 아키텍처 × 엔드투엔드 AI</title>
+<meta name="description" content="30년의 아키텍처 위에, AI를 끝까지 만듭니다. 더시스템아이디어스">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@500&amp;family=Space+Grotesk:wght@500;700&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2F6BFF}a:hover{color:#1F4FCC}
+html{scroll-behavior:smooth}
+section[id]{scroll-margin-top:80px}
+@media(max-width:700px){
+  h1{font-size:38px!important}
+  h2{font-size:29px!important}
+  section>div{padding-top:72px!important;padding-bottom:72px!important}
+  header nav{gap:0!important}
+  article{padding:28px!important}
+  form{padding:24px!important}
+}
+</style>
+</head>
+<body>
+<div id="top-anchor"></div>
+<div style="width: 100%; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #0E1B33; background: #FFFFFF">
+
+<!-- 0. HEADER -->
+<header style="position: sticky; top: 0; z-index: 10; background: rgba(14,27,51,0.96); border-bottom: 1px solid #22314F">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; min-height: 72px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<a href="#top" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #FFFFFF">
+<span style="display: inline-flex; width: 32px; height: 32px; border-radius: 8px; background: #2F6BFF; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; color: #FFFFFF">TS</span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -0.01em">The System <span style="color: #8FB0FF">Ideas</span></span>
+</a>
+<nav aria-label="주요 메뉴" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
+<a href="#about" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">소개</a>
+<a href="#services" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">AI 서비스</a>
+<a href="#pipeline" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">파이프라인</a>
+<a href="#projects" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">사례</a>
+<a href="#history" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">여정</a>
+<a href="{% url 'public-blog' %}" style="color: #D5DCEA; text-decoration: none; font-size: 15px; padding: 12px 14px">블로그</a>{% if user.is_authenticated %}<a href="{% url 'memo-app' %}" style="color: #FFFFFF; text-decoration: none; font-size: 15px; font-weight: 600; padding: 11px 18px; border: 1px solid #4A5D82; border-radius: 8px">내 메모</a>{% else %}<a href="{% url 'login' %}?next={% url 'memo-app' %}" id="landing-login" style="color: #FFFFFF; text-decoration: none; font-size: 15px; font-weight: 600; padding: 11px 18px; border: 1px solid #4A5D82; border-radius: 8px">로그인</a>{% endif %}<a href="#contact" style="margin-left: 8px; background: #2F6BFF; color: #FFFFFF; text-decoration: none; font-size: 15px; font-weight: 600; padding: 12px 20px; border-radius: 8px">AI 프로젝트 상담</a>
+</nav>
+</div>
+</header>
+
+<!-- 1. HERO -->
+<section id="top" style="position: relative; overflow: hidden; background: #0E1B33; color: #FFFFFF">
+<svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 1440 680" preserveAspectRatio="xMidYMid slice" style="position: absolute; inset: 0; opacity: 0.6">
+<g stroke="#2A3D63" stroke-width="1" fill="none">
+<path d="M880 150 L1060 110 M880 150 L1060 250 M880 150 L1060 390 M880 150 L1060 530"></path>
+<path d="M880 340 L1060 110 M880 340 L1060 250 M880 340 L1060 390 M880 340 L1060 530"></path>
+<path d="M880 530 L1060 110 M880 530 L1060 250 M880 530 L1060 390 M880 530 L1060 530"></path>
+<path d="M1060 110 L1240 200 M1060 250 L1240 200 M1060 390 L1240 200 M1060 530 L1240 200"></path>
+<path d="M1060 110 L1240 460 M1060 250 L1240 460 M1060 390 L1240 460 M1060 530 L1240 460"></path>
+<path d="M1240 200 L1380 330 M1240 460 L1380 330"></path>
+</g>
+<g fill="#2F6BFF">
+<circle cx="880" cy="150" r="6"></circle><circle cx="880" cy="340" r="6"></circle><circle cx="880" cy="530" r="6"></circle>
+<circle cx="1060" cy="110" r="5"></circle><circle cx="1060" cy="250" r="8"></circle><circle cx="1060" cy="390" r="5"></circle><circle cx="1060" cy="530" r="7"></circle>
+<circle cx="1240" cy="200" r="7"></circle><circle cx="1240" cy="460" r="6"></circle>
+</g>
+<circle cx="1380" cy="330" r="9" fill="#E5483B"></circle>
+<circle cx="1380" cy="330" r="24" fill="none" stroke="#E5483B" stroke-width="1.5"></circle>
+</svg>
+<div style="position: relative; max-width: 1200px; margin: 0 auto; padding: 120px 24px 96px; display: flex; flex-direction: column; gap: 32px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; letter-spacing: 0.18em; color: #8FB0FF">ENTERPRISE ARCHITECTURE × END-TO-END AI</p>
+<h1 style="margin: 0; font-size: 60px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; max-width: 860px">30년의 아키텍처 위에,<br>AI를 끝까지 만듭니다.</h1>
+<p style="margin: 0; font-size: 20px; line-height: 1.7; color: #C4CEE0; max-width: 660px">거대한 엔터프라이즈 시스템을 설계해 온 시야로, 데이터부터 모델 학습, 엣지 배포까지 AI 솔루션을 처음부터 끝까지 직접 만듭니다.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<a href="#contact" style="background: #2F6BFF; color: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 16px; padding: 16px 28px; border-radius: 8px">AI 프로젝트 상담하기</a>
+<a href="#projects" style="border: 1px solid #4A5D82; color: #FFFFFF; text-decoration: none; font-weight: 500; font-size: 16px; padding: 16px 28px; border-radius: 8px">AI 사례 보기</a>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin-top: 40px; border-top: 1px solid #2A3D63; max-width: 900px">
+<div style="padding: 28px 24px 0 0">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: #FFFFFF">30<span style="color: #8FB0FF">+</span></p>
+<p style="margin: 4px 0 0; font-size: 15px; color: #AEB9CE">년 엔터프라이즈 IT</p>
+</div>
+<div style="padding: 28px 24px 0 0">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: #FFFFFF">12<span style="color: #8FB0FF">y</span></p>
+<p style="margin: 4px 0 0; font-size: 15px; color: #AEB9CE">POSCO 미션 크리티컬 시스템</p>
+</div>
+<div style="padding: 28px 24px 0 0">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: #FFFFFF">6<span style="color: #8FB0FF">y</span></p>
+<p style="margin: 4px 0 0; font-size: 15px; color: #AEB9CE">IBM 아키텍트 · EA · PM</p>
+</div>
+<div style="padding: 28px 24px 0 0">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; color: #FFFFFF">2016</p>
+<p style="margin: 4px 0 0; font-size: 15px; color: #AEB9CE">딥러닝 전환, AI 풀스택</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 2. ABOUT -->
+<section id="about" style="background: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 780px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">ABOUT</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">큰 그림과 실행 사이,<br>통역이 필요 없습니다.</h2>
+<p style="margin: 0; font-size: 18px; line-height: 1.8; color: #4A5672">개발자, 아키텍트, IT 컨설턴트, 프로젝트 매니저. 30년 동안 맡아 온 역할들이 한 사람 안에 있습니다. 전사 아키텍처를 설계하는 사람이 AI 코드를 직접 씁니다.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px">
+<span style="font-size: 14px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 8px 14px; border-radius: 999px">Developer</span>
+<span style="font-size: 14px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 8px 14px; border-radius: 999px">Architect</span>
+<span style="font-size: 14px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 8px 14px; border-radius: 999px">IT Consultant</span>
+<span style="font-size: 14px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 8px 14px; border-radius: 999px">Project Manager</span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px">
+<div style="background: #F4F6FA; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">MACRO VISION</p>
+<p style="margin: 0; font-size: 26px; font-weight: 700">거시적 설계</p>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672">제조·금융·통신의 대규모 엔터프라이즈 아키텍처를 설계하고 레거시를 현대화해 온 시야.</p>
+</div>
+<div style="background: #F4F6FA; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">HANDS-ON AI</p>
+<p style="margin: 0; font-size: 26px; font-weight: 700">엔드투엔드 실행</p>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672">데이터 파이프라인부터 모델, 백엔드·프론트엔드, 엣지 배포까지 AI를 직접 만드는 손.</p>
+</div>
+<div style="background: #0E1B33; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #8FB0FF">THE SYSTEMER</p>
+<p style="margin: 0; font-size: 26px; font-weight: 700; color: #FFFFFF">두 세계를 잇는 한 사람</p>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #C4CEE0">시스템의 근본 개념에서 출발해, 기업 안에서 실제로 돌아가는 AI를 만듭니다.</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 3. AI SERVICES -->
+<section id="services" style="background: #F4F6FA">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 760px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">AI SERVICES</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">아이디어에서<br>현장 배포까지.</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px">
+<div style="background: #FFFFFF; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 20px; border: 1px solid #E1E6EF">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #2F6BFF">AI 01</span>
+<svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E1B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><rect x="9.5" y="9.5" width="5" height="5"></rect><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"></path></svg>
+</div>
+<h3 style="margin: 0; font-size: 26px">엔드투엔드 AI 솔루션</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672">데이터 확보부터 현장 기기 배포까지, AI 서비스 전체를 한 번에 만듭니다.</p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; color: #0E1B33">
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">컴퓨터 비전 · 합성 데이터 생성</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">데이터셋 관리 · 모델 학습</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">백엔드 · 프론트엔드 · API</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">모바일 엣지 배포</li>
+</ul>
+</div>
+<div style="background: #FFFFFF; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 20px; border: 1px solid #E1E6EF">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #2F6BFF">AI 02</span>
+<svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E1B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>
+</div>
+<h3 style="margin: 0; font-size: 26px">엔터프라이즈 AI 아키텍처</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672">AI를 기존 기간 시스템·데이터와 제대로 연결하는 설계와 도입 로드맵.</p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; color: #0E1B33">
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">AI 도입 전략 · 로드맵</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">데이터 아키텍처 · EAI 연계</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">레거시 현대화와 AI 통합</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">대형 프로젝트 PM</li>
+</ul>
+</div>
+<div style="background: #FFFFFF; border-radius: 16px; padding: 40px 32px; display: flex; flex-direction: column; gap: 20px; border: 1px solid #E1E6EF">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #2F6BFF">AI 03</span>
+<svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E1B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"></path></svg>
+</div>
+<h3 style="margin: 0; font-size: 26px">LLM 기반 고속 프로토타이핑</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672">LLM 기반 개발 방식으로 아이디어를 빠르게 동작하는 시제품으로 만듭니다.</p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; color: #0E1B33">
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">PoC · MVP 개발</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">사내 업무 자동화 도구</li>
+<li style="padding: 10px 0; border-top: 1px solid #E1E6EF">아키텍처 검증 후 본 구축 연결</li>
+</ul>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 24px 32px; background: #FFFFFF; border-radius: 12px; border: 1px solid #E1E6EF">
+<span style="font-weight: 700; font-size: 16px">기반 역량</span>
+<span style="font-size: 15px; color: #4A5672">엔터프라이즈 아키텍처(EA)</span>
+<span style="font-size: 15px; color: #4A5672">EAI · 데이터 아키텍처</span>
+<span style="font-size: 15px; color: #4A5672">차세대 시스템 구축</span>
+<span style="font-size: 15px; color: #4A5672">글로벌 표준 SW 공학 · PM 방법론</span>
+</div>
+</div>
+</section>
+
+<!-- 4. PIPELINE -->
+<section id="pipeline" style="background: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 640px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">END-TO-END PIPELINE</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">파이프라인의 처음부터 끝까지,<br>한 사람의 책임으로.</h2>
+</div>
+<p style="margin: 0; font-size: 16px; line-height: 1.7; color: #4A5672; max-width: 420px">단계마다 담당자가 바뀌면 의도가 흐려집니다. 데이터에서 배포까지 같은 설계 원칙으로 이어 갑니다.</p>
+</div>
+<ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px">
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">01 / DATA</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">데이터 수집·합성</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">부족한 현장 데이터는 합성 이미지로 채웁니다.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">synthetic data</span>
+</li>
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">02 / DATASET</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">데이터셋 관리</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">라벨링과 버전 관리로 재현 가능한 학습 기반.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">versioning</span>
+</li>
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">03 / MODEL</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">모델 학습</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">문제에 맞는 딥러닝 모델 설계·학습·평가.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">Python · DL</span>
+</li>
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">04 / BACKEND</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">백엔드 · API</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">모델을 서비스로 만드는 서버와 연계.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">API · EAI</span>
+</li>
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">05 / FRONTEND</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">프론트엔드</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">현장 사용자가 바로 쓰는 화면.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">web · mobile</span>
+</li>
+
+<li style="position: relative; background: #F4F6FA; border-radius: 14px; padding: 28px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 190px; box-sizing: border-box">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #1F4FCC">06 / EDGE</span>
+<span style="font-size: 19px; font-weight: 700; line-height: 1.35">엣지 배포</span>
+<span style="font-size: 14px; line-height: 1.6; color: #4A5672">모바일·현장 기기에서 직접 추론.</span>
+<span style="margin-top: auto; align-self: flex-start; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C3852; background: #FFFFFF; border: 1px solid #E1E6EF; padding: 4px 10px; border-radius: 6px">on-device</span>
+</li>
+
+</ol>
+</div>
+</section>
+
+<!-- 5. WHY -->
+<section id="why" style="background: #0E1B33; color: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 760px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #8FB0FF">WHY THE SYSTEM</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">데모가 아니라,<br>운영되는 AI.</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 32px">
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 24px; border-top: 2px solid #2F6BFF">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #8FB0FF">01</p>
+<p style="margin: 0; font-size: 19px; font-weight: 700; line-height: 1.4">두 세계를 잇는다</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C4CEE0">아키텍처를 설계하는 사람이 AI 코드를 직접 씁니다. 기획과 구현 사이에 통역이 없습니다.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 24px; border-top: 2px solid #2F6BFF">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #8FB0FF">02</p>
+<p style="margin: 0; font-size: 19px; font-weight: 700; line-height: 1.4">엔드투엔드 오너십</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C4CEE0">데이터부터 엣지 배포까지 전체 생애주기를 책임집니다.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 24px; border-top: 2px solid #2F6BFF">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #8FB0FF">03</p>
+<p style="margin: 0; font-size: 19px; font-weight: 700; line-height: 1.4">운영되는 AI</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C4CEE0">POSCO·IBM의 미션 크리티컬 경험으로 AI를 기존 시스템에 안정적으로 붙입니다.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 24px; border-top: 2px solid #2F6BFF">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #8FB0FF">04</p>
+<p style="margin: 0; font-size: 19px; font-weight: 700; line-height: 1.4">LLM으로 빨라진 속도</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C4CEE0">LLM 기반 개발 방식으로 프로토타이핑과 생산성을 끌어올립니다.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 24px; border-top: 2px solid #2F6BFF">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #8FB0FF">05</p>
+<p style="margin: 0; font-size: 19px; font-weight: 700; line-height: 1.4">글로벌 표준 방법론</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C4CEE0">IBM에서 익힌 SW 공학·PM 방법론을 AI 프로젝트에도 적용합니다.</p>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- 6. PROJECTS -->
+<section id="projects" style="background: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 48px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 760px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">CASE STUDY</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">말이 아니라,<br>동작하는 결과물로.</h2>
+</div>
+
+<article style="background: #0E1B33; color: #FFFFFF; border-radius: 20px; padding: 48px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
+<div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="font-size: 13px; font-weight: 600; color: #0E1B33; background: #8FB0FF; padding: 6px 12px; border-radius: 999px">Computer Vision</span>
+<span style="font-size: 13px; font-weight: 600; color: #FFFFFF; border: 1px solid #4A5D82; padding: 5px 12px; border-radius: 999px">단독 수행 · End-to-End</span>
+</div>
+<h3 style="margin: 0; font-size: 32px; line-height: 1.35; letter-spacing: -0.01em">무라벨 PET병 형태 인식<br>비전 AI 서비스</h3>
+<p style="margin: 0; font-size: 17px; line-height: 1.75; color: #C4CEE0">라벨이 없는 투명 PET병의 형태를 식별하는 컴퓨터 비전 서비스. 합성 이미지 생성부터 데이터셋 관리, 모델 학습, 모바일 엣지 배포까지 전체 생애주기를 혼자 책임졌습니다. 30년 아키텍처 규율과 현대 AI 실행력을 함께 검증한 프로젝트입니다.</p>
+<ol style="margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<li style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #FFFFFF; background: #1B2B4C; padding: 8px 12px; border-radius: 8px">합성 이미지</li>
+<li aria-hidden="true" style="color: #8FB0FF">→</li>
+<li style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #FFFFFF; background: #1B2B4C; padding: 8px 12px; border-radius: 8px">데이터셋</li>
+<li aria-hidden="true" style="color: #8FB0FF">→</li>
+<li style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #FFFFFF; background: #1B2B4C; padding: 8px 12px; border-radius: 8px">모델 학습</li>
+<li aria-hidden="true" style="color: #8FB0FF">→</li>
+<li style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #FFFFFF; background: #1B2B4C; padding: 8px 12px; border-radius: 8px">서비스 구현</li>
+<li aria-hidden="true" style="color: #8FB0FF">→</li>
+<li style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #0E1B33; background: #8FB0FF; padding: 8px 12px; border-radius: 8px">모바일 엣지</li>
+</ol>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-top: 12px; border-top: 1px solid #2A3D63; padding-top: 20px">
+
+
+<div><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700">1인</p><p style="margin: 4px 0 0; font-size: 14px; color: #AEB9CE">전 과정 단독 수행</p></div>
+</div>
+</div>
+<div style="flex: 1 1 240px; display: flex; justify-content: center">
+<div style="width: 240px; height: 440px; border-radius: 36px; border: 2px solid #4A5D82; background: #14264A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; box-sizing: border-box; padding: 24px">
+<svg aria-hidden="true" width="64" height="120" viewBox="0 0 64 120" fill="none" stroke="#8FB0FF" stroke-width="2"><path d="M24 4h16v12c0 4 12 10 12 24v70a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V40c0-14 12-20 12-24V4z"></path></svg>
+<div style="border: 2px dashed #8FB0FF; border-radius: 8px; padding: 6px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8FB0FF">shape: result</div>
+<p style="margin: 0; font-size: 13px; color: #AEB9CE; text-align: center">앱 화면 · 준비 중</p>
+</div>
+</div>
+</article>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px">
+
+<article style="background: #F4F6FA; border-radius: 16px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<span style="font-size: 13px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 6px 12px; border-radius: 999px">대형 SI</span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #5A6680">2010–2012</span>
+</div>
+<h3 style="margin: 8px 0 0; font-size: 21px; line-height: 1.45">한살림 차세대 플랫폼</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #4A5672">ISP 수립부터 구축·운영까지 주 사업자로 수행</p>
+</article>
+
+<article style="background: #F4F6FA; border-radius: 16px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<span style="font-size: 13px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 6px 12px; border-radius: 999px">EA · EAI</span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #5A6680">2001–2007</span>
+</div>
+<h3 style="margin: 8px 0 0; font-size: 21px; line-height: 1.45">IBM 레거시 현대화</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #4A5672">제조·금융·통신 대형 프로젝트를 아키텍트·PM으로 리드</p>
+</article>
+
+<article style="background: #F4F6FA; border-radius: 16px; padding: 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<span style="font-size: 13px; font-weight: 600; color: #1F4FCC; background: #E3EBFF; padding: 6px 12px; border-radius: 999px">현장 시스템</span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: #5A6680">1989–2001</span>
+</div>
+<h3 style="margin: 8px 0 0; font-size: 21px; line-height: 1.45">POSCO 제철 공정 자동화</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #4A5672">일관 제철 라인의 미션 크리티컬 시스템 구축·운영</p>
+</article>
+
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 24px; padding-top: 24px">
+<p style="margin: 0; font-size: 18px; font-weight: 700">함께한 기업</p>
+<div role="tablist" aria-label="산업별 고객사" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" role="tab" data-industry="mfg" aria-selected="true" data-on="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;" data-off="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;" style="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;">제조</button><button type="button" role="tab" data-industry="fin" aria-selected="false" data-on="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;" data-off="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;" style="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;">금융</button><button type="button" role="tab" data-industry="tel" aria-selected="false" data-on="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;" data-off="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;" style="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;">통신</button><button type="button" role="tab" data-industry="ret" aria-selected="false" data-on="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;" data-off="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;" style="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;">유통·서비스</button><button type="button" role="tab" data-industry="pub" aria-selected="false" data-on="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #0E1B33; color: #FFFFFF; border: 1px solid #0E1B33;" data-off="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;" style="min-height: 44px; padding: 10px 20px; border-radius: 999px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; background: #FFFFFF; color: #2C3852; border: 1px solid #C9D1DF;">공공·교육</button>
+</div>
+<div role="tabpanel" data-industry-panel="mfg" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px"><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">POSCO</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">삼성전자</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">삼성SDI</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">현대중공업</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">현대제철</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">두산</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">GM대우</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">쌍용자동차</div></div><div role="tabpanel" data-industry-panel="fin" hidden style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px"><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">현대카드</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">삼성증권</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">교보생명</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">우리은행</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">하나은행</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">신협</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">동부화재</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">뉴욕생명</div></div><div role="tabpanel" data-industry-panel="tel" hidden style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px"><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">SK텔레콤</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">SK플래닛</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">LG텔레콤</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">KTF</div></div><div role="tabpanel" data-industry-panel="ret" hidden style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px"><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">한살림</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">호텔신라</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">홈플러스(TESCO)</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">교보문고</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">GS그룹</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">GS칼텍스</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">한진해운</div></div><div role="tabpanel" data-industry-panel="pub" hidden style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px"><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">한국토지공사</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">한국정보화진흥원</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">영화진흥위원회</div><div style="height: 72px; border: 1px solid #E1E6EF; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #2C3852">동국대학교</div></div>
+</div>
+</div>
+</section>
+
+<!-- 7. JOURNEY -->
+<section id="history" style="background: #F4F6FA">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 760px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">JOURNEY</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">코드에서 시작해,<br>다시 코드로.</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.7; color: #4A5672">신호처리로 시작해 미션 크리티컬 시스템과 엔터프라이즈 아키텍처를 거쳐, 다시 AI를 직접 만드는 자리로 돌아왔습니다.</p>
+</div>
+<ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0; border-top: 2px solid #0E1B33">
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">대학</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">C 기반 신호처리 프로그램, 사람·동물 소리 구분으로 최우수</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">1989</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">POSCO 12년, 제철 공정 자동화 시스템 구축·운영</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">2001</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">IBM 6년, IT 아키텍트 · EA 컨설턴트 · PM</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">2007</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">IT 컨설팅 기업 더시스템아이디어스 창업</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">2010</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">한살림 차세대 플랫폼 구축</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #FFFFFF; border: 3px solid #0E1B33;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">2016</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">알파고를 계기로 딥러닝·Python 전환</span>
+</li>
+
+<li style="position: relative; padding: 32px 20px 0 0; display: flex; flex-direction: column; gap: 8px">
+<span aria-hidden="true" style="position: absolute; top: -8px; left: 0; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; background: #E5483B; border: 0;"></span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #0E1B33">NOW</span>
+<span style="font-size: 15px; line-height: 1.6; color: #4A5672">LLM 기반 개발, 엔드투엔드 비전 AI 서비스</span>
+</li>
+
+</ol>
+</div>
+</section>
+
+<!-- 8. CONTACT -->
+<section id="contact" style="background: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-wrap: wrap; gap: 64px">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.16em; color: #2F6BFF">CONTACT</p>
+<h2 style="margin: 0; font-size: 40px; line-height: 1.3; letter-spacing: -0.02em">AI 아이디어,<br>동작하는 서비스로.</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.7; color: #4A5672">현장에 AI를 붙이고 싶은데 어디서부터 시작할지 막막하다면, 아이디어 한 줄이면 충분합니다. 아키텍처부터 함께 그려 드립니다.</p>
+<dl style="margin: 16px 0 0; display: grid; grid-template-columns: 80px 1fr; gap: 14px 16px; font-size: 16px">
+<dt style="color: #5A6680">전화</dt><dd style="margin: 0; font-weight: 600">02-6253-7110</dd>
+<dt style="color: #5A6680">이메일</dt><dd style="margin: 0"><a href="mailto:cskang@thesystemideas.com">cskang@thesystemideas.com</a></dd>
+<dt style="color: #5A6680">주소</dt><dd style="margin: 0">서울시 서초구 양재동 391-18</dd>
+</dl>
+</div>
+<form id="contact-form" style="flex: 1 1 480px; background: #F4F6FA; border-radius: 16px; padding: 40px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">회사명<input type="text" name="company" placeholder="회사 또는 기관명" style="height: 48px; border: 1px solid #C9D1DF; border-radius: 8px; padding: 0 14px; font-size: 15px; font-family: inherit; background: #FFFFFF"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">담당자<input type="text" name="person" placeholder="이름 / 직책" style="height: 48px; border: 1px solid #C9D1DF; border-radius: 8px; padding: 0 14px; font-size: 15px; font-family: inherit; background: #FFFFFF"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">연락처<input type="tel" name="phone" placeholder="010-0000-0000" style="height: 48px; border: 1px solid #C9D1DF; border-radius: 8px; padding: 0 14px; font-size: 15px; font-family: inherit; background: #FFFFFF"></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">이메일<input type="email" name="email" placeholder="name@company.com" style="height: 48px; border: 1px solid #C9D1DF; border-radius: 8px; padding: 0 14px; font-size: 15px; font-family: inherit; background: #FFFFFF"></label>
+</div>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">관심 분야<select name="topic" style="height: 48px; border: 1px solid #C9D1DF; border-radius: 8px; padding: 0 12px; font-size: 15px; font-family: inherit; background: #FFFFFF"><option>엔드투엔드 AI 솔루션 구축</option><option>엔터프라이즈 AI 아키텍처 · 도입 컨설팅</option><option>LLM 기반 프로토타입 · PoC</option><option>엔터프라이즈 아키텍처 · PM</option><option>기타</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600">AI로 풀고 싶은 문제<textarea name="message" rows="5" placeholder="현장의 문제, 보유 데이터, 원하는 일정을 적어 주세요." style="border: 1px solid #C9D1DF; border-radius: 8px; padding: 12px 14px; font-size: 15px; font-family: inherit; background: #FFFFFF; resize: vertical"></textarea></label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #4A5672"><input type="checkbox" name="consent" required style="width: 18px; height: 18px">개인정보 수집·이용에 동의합니다.</label>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<button type="submit" style="background: #2F6BFF; color: #FFFFFF; border: 0; font-family: inherit; font-weight: 600; font-size: 16px; padding: 16px 28px; border-radius: 8px; cursor: pointer">상담 요청하기</button>
+</div>
+</form>
+</div>
+</section>
+
+<!-- 9. FOOTER -->
+<footer style="background: #0E1B33; color: #AEB9CE">
+<div style="max-width: 1200px; margin: 0 auto; padding: 56px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; color: #FFFFFF">The System <span style="color: #8FB0FF">Ideas</span></span>
+<span style="font-size: 14px">Enterprise Architecture × End-to-End AI</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.7">
+<span>㈜더시스템아이디어스 · 대표 강천수 · 사업자등록번호 212-81-85241</span>
+<span>서울시 서초구 양재동 391-18 · T 02-6253-7110 · F 02-6257-7110</span>
+<span><a href="#contact" style="color: #D5DCEA">개인정보처리방침</a> · © The System Ideas. All rights reserved.</span>
+</div>
+</div>
+</footer>
+
+</div>
+<script>
+(function () {
+  // 산업별 고객사 탭
+  var tabs = document.querySelectorAll('[role=tab][data-industry]');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.style.cssText = on ? t.dataset.on : t.dataset.off;
+      });
+      document.querySelectorAll('[data-industry-panel]').forEach(function (panel) {
+        panel.hidden = panel.dataset.industryPanel !== tab.dataset.industry;
+      });
+    });
+  });
+  // 문의 폼: 서버에 저장하지 않고 메일 앱으로 내용을 전달한다.
+  var form = document.getElementById('contact-form');
+  if (form) form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var d = new FormData(form);
+    var lines = ['회사명: ' + d.get('company'), '담당자: ' + d.get('person'), '연락처: ' + d.get('phone'), '이메일: ' + d.get('email'), '관심 분야: ' + d.get('topic'), '', String(d.get('message') || '')];
+    location.href = 'mailto:cskang@thesystemideas.com?subject=' + encodeURIComponent('[AI 프로젝트 상담] ' + (d.get('company') || '')) + '&body=' + encodeURIComponent(lines.join('\n'));
+  });
+})();
+</script>
+</body>
+</html>

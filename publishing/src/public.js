@@ -2,6 +2,8 @@ import './styles.css';
 import './link-styles.css';
 import './image-node.css';
 import './public.css';
+import './user-menu.css';
+import './user-menu.js';
 import { createMemoEditor } from './editor.js';
 import { createMasonry } from './masonry.js';
 

@@ -8,13 +8,29 @@
 .memo-image-caption{min-height:1.6em;cursor:text;outline:0;white-space:pre-wrap}
 .memo-image-caption:empty:before{content:attr(data-placeholder);color:#8295aa;font-style:italic;pointer-events:none}
 .memo-image-toolbar{display:none;position:absolute;z-index:8;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%);max-width:min(640px,calc(100vw - 32px));padding:6px;gap:5px;align-items:center;justify-content:center;flex-wrap:wrap;background:#142638;border:1px solid #3b6078;border-radius:9px;box-shadow:0 8px 28px #0009;color:var(--text)}
-.memo-image-node.is-selected .memo-image-toolbar{display:flex}
+.memo-image-node.is-editing .memo-image-toolbar{display:flex}
 .memo-image-toolbar button,.memo-image-link-popover button{min-height:30px;padding:4px 8px;border-radius:5px;background:#213b50;color:#dceaf5;font-size:12px}
 .memo-image-toolbar button[aria-pressed="true"]{background:var(--accent);color:#071521;font-weight:700}
 .memo-image-toolbar button:focus-visible,.memo-image-link-popover button:focus-visible,.memo-image-link-popover input:focus-visible,.memo-image-toolbar input:focus-visible{outline:2px solid #8be4ff;outline-offset:2px}
 .memo-image-toolbar .danger{color:#ffb5b5}.memo-image-toolbar label{display:flex;align-items:center;gap:4px;font-size:12px;color:#b8c8d8}.memo-image-toolbar input{width:76px;background:#0e1b29;border:1px solid #3d5870;border-radius:5px;color:var(--text);padding:5px}
 .memo-image-link-popover{position:absolute;z-index:9;top:8px;left:50%;transform:translateX(-50%);width:min(460px,calc(100vw - 40px));display:flex;gap:6px;padding:8px;background:#142638;border:1px solid #3b6078;border-radius:8px;box-shadow:0 8px 28px #0009}
 .memo-image-link-popover[hidden]{display:none}.memo-image-link-popover input{min-width:0;flex:1;background:#0e1b29;border:1px solid #3d5870;border-radius:5px;color:var(--text);padding:6px 8px}
+/* Image name row */
+.image-name-row{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;flex:1 0 100%;width:100%;margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+.image-name-row[hidden]{display:none}
+.image-name-label{font-size:12px;color:var(--muted)}
+.image-name-input{flex:1 1 0;min-width:0;background:#0e1b29;border:1px solid #3d5870;border-radius:5px;color:var(--text);padding:5px 8px;font-size:12px}
+.image-name-input:disabled{opacity:.6}
+.image-name-status{flex:1 0 100%;min-height:14px;font-size:11px;color:var(--muted)}
+.image-name-status[data-kind="error"]{color:var(--danger)}
+.image-name-status[data-kind="ok"]{color:var(--text)}
 .memo-image-resize-handle{display:none;position:absolute;width:16px;height:16px;padding:0;border:2px solid #071521;border-radius:50%;background:var(--accent);z-index:7}
 .memo-image-node.is-selected .memo-image-resize-handle{display:block}.memo-image-resize-handle[data-corner="nw"]{left:-8px;top:-8px;cursor:nwse-resize}.memo-image-resize-handle[data-corner="ne"]{right:-8px;top:-8px;cursor:nesw-resize}.memo-image-resize-handle[data-corner="sw"]{left:-8px;bottom:-8px;cursor:nesw-resize}.memo-image-resize-handle[data-corner="se"]{right:-8px;bottom:-8px;cursor:nwse-resize}
 @media(max-width:639px){.memo-image-toolbar{position:fixed;inset:auto 10px calc(122px + env(safe-area-inset-bottom));transform:none;max-width:none}.memo-image-link-popover{position:fixed;inset:auto 10px calc(178px + env(safe-area-inset-bottom));transform:none;width:auto}.rich-content figure[data-memo-image]{max-width:100%!important}}
+
+.memo-file-card { margin: 12px 0; }
+.memo-file-card a { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; padding: 10px 14px; border: 1px solid var(--line, rgba(128,128,128,.35)); border-radius: 10px; background: rgba(128,128,128,.08); color: inherit; text-decoration: none; }
+.memo-file-card a:hover { background: rgba(128,128,128,.16); }
+.memo-file-card .memo-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.memo-file-card .memo-file-size { flex: none; opacity: .65; font-size: .85em; }
+.ProseMirror-selectednode.memo-file-card a { outline: 2px solid currentColor; outline-offset: 2px; }

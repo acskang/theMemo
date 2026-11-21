@@ -13,7 +13,8 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_IMAGE_PIXELS = 40_000_000
 ALLOWED_HOST = "i.ytimg.com"
 YOUTUBE_PATH = re.compile(r"^/vi/[A-Za-z0-9_-]{11}/[A-Za-z0-9_-]+\.(?:jpg|webp)$")
-YOUTUBE_QUERY_VALUE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
+# sqp/rs 값은 base64 계열이라 길이에 따라 "=" 패딩(또는 %3D, +, /)이 붙을 수 있다. host/path 는 고정이므로 query 값만 넓게 허용한다.
+YOUTUBE_QUERY_VALUE = re.compile(r"^[A-Za-z0-9_=+/.~-]{1,512}$")
 
 
 class RemoteImageError(ValueError):

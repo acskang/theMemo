@@ -55,12 +55,12 @@ class AuthenticationFlowTests(TestCase):
             "password1": "AnotherSafe!24680", "password2": "AnotherSafe!24680",
         })
         self.assertContains(duplicate, "이미 존재합니다")
+        # 베타 테스트 기간에는 약한 비밀번호도 허용한다. 종료 후 강한 비밀번호 검증을 복원하면 이 검증을 뒤집을 것.
         weak = client.post("/signup/", {
             "csrfmiddlewaretoken": token, "username": "weak-member", "password1": "123", "password2": "123",
         })
-        self.assertEqual(weak.status_code, 200)
-        self.assertContains(weak, "비밀번호는 너무 짧습니다")
-        self.assertFalse(get_user_model().objects.filter(username="weak-member").exists())
+        self.assertEqual(weak.status_code, 302)
+        self.assertTrue(get_user_model().objects.filter(username="weak-member").exists())
 
     def test_login_success_failure_safe_next_and_csrf(self):
         csrf_client = Client(enforce_csrf_checks=True)
@@ -174,7 +174,8 @@ class MemoApiTests(TestCase):
         self.assertContains(response, '"mode": "django"')
         self.assertNotContains(response, '"mode":"demo"')
         self.assertContains(response, "/static/memo/assets/index-")
-        self.assertEqual(Notebook.objects.filter(owner=self.user).count(), 5)
+        # 이미 메모장이 있는 사용자에게는 기본 메모장을 다시 만들지 않는다.
+        self.assertEqual(Notebook.objects.filter(owner=self.user).count(), 1)
 
     def test_create_update_requery_preserves_json_and_state(self):
         data = self.payload(favorite=True)
@@ -193,6 +194,18 @@ class MemoApiTests(TestCase):
         item = self.client.get("/api/memo/notes/").json()["items"][0]
         self.assertFalse(item["deleted"])
         self.assertEqual(item["tags"], ["일상"])
+
+    def test_tiptap_starter_kit_marks_from_pasted_html_are_accepted(self):
+        marks = [{"type": mark} for mark in ("bold", "italic", "strike", "code", "underline")]
+        content = {
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": [
+                {"type": "text", "text": "붙여넣은 본문", "marks": marks},
+            ]}],
+        }
+        response = self.put(self.payload(content=content))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["content"], content)
 
     def test_stale_revision_returns_409_without_overwrite(self):
         data = self.payload()
@@ -294,6 +307,19 @@ class ValidationSnapshotTests(MemoApiTests):
         })
         self.assertEqual(self.put(unsafe).status_code, 400)
 
+    def test_block_line_height_round_trips_and_rejects_invalid_value(self):
+        content = {"type": "doc", "content": [
+            {"type": "paragraph", "attrs": {"textAlign": None, "lineHeight": "1.75"}, "content": [{"type": "text", "text": "첫 문단"}]},
+            {"type": "heading", "attrs": {"level": 2, "textAlign": None, "lineHeight": "2.1"}, "content": [{"type": "text", "text": "제목"}]},
+        ]}
+        response = self.put(self.payload(content=content))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["content"], content)
+
+        for invalid in ("0.99", "3.01", "9", 1.75):
+            content["content"][0]["attrs"]["lineHeight"] = invalid
+            self.assertEqual(self.put(self.payload(content=content)).status_code, 400)
+
     def test_private_image_upload_insert_and_retrieve(self):
         response = self.client.post("/api/memo/images/", {"file": self.image_file("../photo.png")})
         self.assertEqual(response.status_code, 201)
@@ -319,7 +345,7 @@ class ValidationSnapshotTests(MemoApiTests):
         draft = self.put(self.payload(title="", is_public=True)).json()
 
         anonymous = Client()
-        listing = anonymous.get("/")
+        listing = anonymous.get("/blog/")
         self.assertEqual(listing.status_code, 200)
         self.assertContains(listing, "공개 기록")
         self.assertNotContains(listing, "비공개 기록")
@@ -424,6 +450,44 @@ class ValidationSnapshotTests(MemoApiTests):
         trashed.update({"revision": 2, "deleted": False})
         self.assertEqual(self.put(trashed).status_code, 409)
 
+    # ---------------------------------------------------------------------
+    # Notebook delete & rename tests
+    # ---------------------------------------------------------------------
+    def test_delete_own_notebook(self):
+        notebook = Notebook.objects.create(owner=self.user, name="삭제 테스트")
+        count_before = Notebook.objects.filter(owner=self.user).count()
+        response = self.client.delete(f"/api/memo/notebooks/{notebook.id}/delete/")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Notebook.objects.filter(id=notebook.id).exists())
+        self.assertTrue(Notebook.objects.filter(owner=self.user, name="일상 기록").exists())
+        self.assertEqual(Notebook.objects.filter(owner=self.user).count(), count_before)
+
+    def test_delete_other_user_notebook(self):
+        notebook = Notebook.objects.create(owner=self.other, name="다른 사람 메모장")
+        response = self.client.delete(f"/api/memo/notebooks/{notebook.id}/delete/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_rename_own_notebook(self):
+        notebook = Notebook.objects.create(owner=self.user, name="이름 변경 테스트")
+        new_name = "새 이름"
+        response = self.client.patch(
+            f"/api/memo/notebooks/{notebook.id}/rename/",
+            json.dumps({"name": new_name}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        notebook.refresh_from_db()
+        self.assertEqual(notebook.name, new_name)
+
+    def test_rename_other_user_notebook(self):
+        notebook = Notebook.objects.create(owner=self.other, name="다른 사람 메모장")
+        response = self.client.patch(
+            f"/api/memo/notebooks/{notebook.id}/rename/",
+            json.dumps({"name": "악성 이름"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)
+
 
 class SnapshotValidationAndPersistenceTests(TestCase):
     @classmethod
@@ -433,7 +497,7 @@ class SnapshotValidationAndPersistenceTests(TestCase):
         # Create a notebook with the specific UUID that appears in the snapshot
         # so the view can find it. The name is arbitrary but kept short.
         cls.notebook = Notebook.objects.create(
-            id="7b490522-b172-4fb3-8304-66fd71e84b2f",
+            id="966639ae-dc12-45df-9a88-9fc5efc9ba18",
             owner=cls.user,
             name="테스트",
         )

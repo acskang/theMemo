@@ -12,6 +12,9 @@ class Notebook(models.Model):
     name = models.CharField(max_length=40)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"{self.name} ({self.id})"
+
     class Meta:
         constraints = [models.UniqueConstraint(fields=["owner", "name"], name="unique_owner_notebook_name")]
         ordering = ["created_at", "id"]
@@ -53,6 +56,23 @@ class MemoImage(models.Model):
     file = models.ImageField(upload_to=private_image_path)
     original_name = models.CharField(max_length=255)
     content_type = models.CharField(max_length=30)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+def private_attachment_path(instance, filename):
+    suffix = Path(filename).suffix.lower()
+    return f"memo-files/{instance.id}{suffix}"
+
+
+class MemoFile(models.Model):
+    """메모 본문에 첨부하는 일반 파일(문서류). 이미지와 달리 항상 다운로드로만 제공한다."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memo_files")
+    file = models.FileField(upload_to=private_attachment_path)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveBigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
 

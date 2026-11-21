@@ -1,20 +1,21 @@
-// Polyfill for test environment
-globalThis.MutationObserver = globalThis.MutationObserver || class {
-  constructor() {}
-};
-globalThis.window = globalThis.window || {};
-globalThis.window.MutationObserver = globalThis.MutationObserver;
-// CSS imports omitted for test environment
+import './styles.css';
+import './link-styles.css';
+import './image-node.css';
+import './user-menu.css';
+import './user-menu.js';
+import './visibility.css';
 import Alpine from 'alpinejs';
 import htmx from 'htmx.org';
-import { createIcons, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox } from 'lucide';
+import { createIcons, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties } from 'lucide';
 import { createAdapter } from './adapters.js';
-import { createMemoEditor, plainText, findImageInfo, safeImage, normalizeImageAttrs, normalizeYouTubeURL, youtubeURLFromThumbnail, moveBlock } from './editor.js';
+import { createMemoEditor, plainText, findImageInfo, safeImage, normalizeImageAttrs, normalizeYouTubeURL, youtubeURLFromThumbnail, moveBlock, normalizeBlockLineHeight, selectedBlockLineHeight, setBlockLineHeight } from './editor.js';
+import { CellSelection, TableMap, selectedRect } from '@tiptap/pm/tables';
 import { loadConfig, ConfigStore } from './configLoader.js';
 import { localDate, newDocument, p } from './sample-data.js';
 import { createMasonry } from './masonry.js';
+import { hasDuplicateNotebookName, normalizeNotebookName } from './notebook-name.js';
 
-const iconSet = { NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox };
+const iconSet = { NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties };
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
@@ -33,9 +34,22 @@ let pasteImageSequence = 0;
 let selectedPublic = false, savedPublic = false;
 let blogCards = [], blogCursor = null, blogCardsLoading = false, blogPageStarted = false, blogRequest = 0, blogMasonry = null;
 let blogSearchTimer = null;
+let editingNotebookId = null;
 const pendingImageImports = new Set();
 const failedImageImports = new Map();
 let prefs = { bodySize: '17', autosave: true }; let activeFilterLabel = '전체 기록';
+const shortcutActions = [
+  ['save', '저장'], ['search', '전체 검색'], ['link', '본문 링크'], ['bold', '굵게'], ['italic', '기울임'], ['underline', '밑줄'],
+  ['strike', '취소선'], ['undo', '실행 취소'], ['redo', '다시 실행'], ['alignLeft', '왼쪽 정렬'], ['alignCenter', '가운데 정렬'],
+  ['alignRight', '오른쪽 정렬'], ['bulletList', '글머리 목록'], ['orderedList', '번호 목록'], ['taskList', '체크리스트'],
+  ['blockquote', '인용문'], ['codeBlock', '코드 블록'], ['insert', '블록 삽입'],
+];
+const defaultShortcuts = [
+  ['save','ctrl+s'],['search','ctrl+k'],['link','ctrl+shift+k'],['bold','ctrl+b'],['italic','ctrl+i'],['underline','ctrl+u'],['strike','ctrl+shift+x'],
+  ['undo','ctrl+z'],['redo','ctrl+shift+z'],['alignLeft','ctrl+shift+l'],['alignCenter','ctrl+shift+e'],['alignRight','ctrl+shift+r'],
+  ['bulletList','ctrl+shift+8'],['orderedList','ctrl+shift+7'],['taskList','ctrl+shift+9'],['blockquote','ctrl+shift+q'],['codeBlock','ctrl+shift+c'],['insert','/'],
+].map(([action, key]) => ({ action, key }));
+let shortcuts = defaultShortcuts;
 const bubble = $('bubble-menu');
 
 Alpine.store('ui', {
@@ -47,11 +61,52 @@ Alpine.store('ui', {
     else this.focus = false;
   },
 });
-window.Alpine = Alpine; window.htmx = htmx; Alpine.start();
+window.Alpine = Alpine; window.htmx = htmx;
+// Only start Alpine when a <body> element is present.  In the test
+// environment the document is a stub, so we skip starting to avoid errors.
+if (document && document.body) {
+  Alpine.start();
+}
+
+function imageNameApi() {
+  if (!adapter || adapter.mode !== 'django') return null;
+  return {
+    load: id => adapter.imageInfo(id).then(data => data?.original_name ?? null),
+    save: (id, name) => adapter.renameImage(id, name).then(data => data?.original_name ?? null),
+  };
+}
 
 function toast(message) {
   clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false;
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, 5500);
+}
+function normalizeShortcut(value) {
+  const parts = String(value || '').trim().toLowerCase().split('+').map(part => part.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const modifiers = new Set(parts.slice(0, -1));
+  if ([...modifiers].some(item => !['ctrl', 'cmd', 'meta', 'alt', 'shift'].includes(item))) return null;
+  const key = parts.at(-1);
+  if (['ctrl', 'cmd', 'meta', 'alt', 'shift'].includes(key) || key.length > 1 && !/^f(?:[1-9]|1[0-2])$/.test(key)) return null;
+  const normalized = [...['ctrl', 'alt', 'shift'].filter(item => modifiers.has(item)), key];
+  return normalized.join('+');
+}
+function shortcutLabel(value) { return value.split('+').map(part => ({ ctrl: 'Ctrl / ⌘', cmd: 'Ctrl / ⌘', meta: 'Ctrl / ⌘', alt: 'Alt / ⌥', shift: 'Shift', '/': '/' }[part] || part.toUpperCase())).join(' + '); }
+function saveShortcuts() { try { localStorage.setItem('smartmemo-shortcuts', JSON.stringify(shortcuts)); } catch { toast('단축키 설정을 저장하지 못했어요.'); } }
+function renderShortcuts() {
+  $('shortcut-help-list').innerHTML = shortcuts.map(item => {
+    const label = shortcutActions.find(([id]) => id === item.action)?.[1] || item.action;
+    return `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(shortcutLabel(item.key))}</dd></div>`;
+  }).join('');
+  $('shortcut-editor').innerHTML = shortcuts.map((item, index) => {
+    const label = shortcutActions.find(([id]) => id === item.action)?.[1] || item.action;
+    return `<div class="shortcut-edit-row"><span>${escapeHTML(label)}</span><input class="text-input" data-shortcut-index="${index}" value="${escapeHTML(shortcutLabel(item.key))}" aria-label="${escapeHTML(label)} 단축키"><button class="icon-button small danger" type="button" data-shortcut-remove="${index}" aria-label="${escapeHTML(label)} 단축키 제거">×</button></div>`;
+  }).join('');
+  $('shortcut-new-action').innerHTML = shortcutActions.filter(([id]) => !shortcuts.some(item => item.action === id)).map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+}
+function eventShortcut(event) {
+  if (!(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return null;
+  const key = event.key.toLowerCase() === ' ' ? 'space' : event.key.toLowerCase();
+  return [...(event.ctrlKey || event.metaKey ? ['ctrl'] : []), ...(event.altKey ? ['alt'] : []), ...(event.shiftKey ? ['shift'] : []), key].join('+');
 }
 function report(error) { console.error(error); toast(error.message || '작업을 완료하지 못했어요.'); }
 function run(fn) { Promise.resolve().then(fn).catch(report); }
@@ -171,6 +226,10 @@ function updateOutline() {
 }
 function updateToolbar() {
   if (!editor || editor.isDestroyed) return;
+  updateTableCellMenu();
+  const imageSelected = editor.isActive('image');
+  $('image-edit-button').disabled = !imageSelected;
+  $('image-edit-button').setAttribute('aria-pressed', String(imageSelected && Boolean($('editor').querySelector('.memo-image-node.is-editing'))));
   const active = { bold: editor.isActive('bold'), italic: editor.isActive('italic'), underline: editor.isActive('underline'), strike: editor.isActive('strike'), highlight: editor.isActive('highlight'), bulletList: editor.isActive('bulletList'), taskList: editor.isActive('taskList') };
   document.querySelectorAll('[data-command]').forEach(button => {
     const cmd = button.dataset.command;
@@ -181,8 +240,55 @@ function updateToolbar() {
   $('block-type').value = editor.isActive('heading') ? `h${editor.getAttributes('heading').level}` : 'paragraph';
   const style = editor.getAttributes('textStyle');
   $('font-family').value = style.fontFamily || '';
-  $('font-size').value = style.fontSize || '17px';
-  $('line-height').value = style.lineHeight || '';
+  syncFontSizeSelect(style.fontSize || '17px');
+  const lineHeight = selectedBlockLineHeight(editor);
+  document.querySelectorAll('[data-line-height]').forEach(button => {
+    const selected = button.dataset.lineHeight === lineHeight;
+    button.setAttribute('aria-checked', String(selected)); button.classList.toggle('active', selected);
+  });
+  $('line-height-button').textContent = lineHeight ? `${Math.round(Number(lineHeight) * 100)}%` : '줄간격';
+  $('line-height-custom-input').value = lineHeight ? String(Math.round(Number(lineHeight) * 100)) : '';
+  $('line-height-custom-input').placeholder = lineHeight ? '' : '혼합';
+}
+function updateTableCellMenu() {
+  const menu = $('table-cell-menu');
+  const controls = $('table-selection-controls');
+  if (!menu || !editor || editor.isDestroyed || !editor.isEditable || !(editor.isActive('tableCell') || editor.isActive('tableHeader'))) { if (menu) menu.hidden = true; if (controls) controls.hidden = true; return; }
+  const selected = selectedRect(editor.state); const tablePos = selected.tableStart - 1;
+  const tableDOM = editor.view.nodeDOM(tablePos); const tableElement = tableDOM instanceof HTMLTableElement ? tableDOM : tableDOM?.querySelector?.('table');
+  const wrap = $('editor').parentElement; if (!tableElement || !wrap) { menu.hidden = true; controls.hidden = true; return; }
+  menu.hidden = false;
+  const wrapRect = wrap.getBoundingClientRect(); const tableRect = tableElement.getBoundingClientRect();
+  menu.style.top = `${tableRect.top - wrapRect.top + wrap.scrollTop + 8}px`;
+  menu.style.left = `${Math.min(tableRect.right - wrapRect.left + wrap.scrollLeft + 8, wrap.clientWidth - menu.offsetWidth)}px`;
+  menu.querySelector('[data-cell-action="mergeCells"]').disabled = !editor.can().mergeCells();
+  menu.querySelector('[data-cell-action="addRow"]').disabled = !editor.can().addRowAfter();
+  menu.querySelector('[data-cell-action="addColumn"]').disabled = !editor.can().addColumnAfter();
+  renderTableSelectionControls(controls, wrap, tableElement, selected, wrapRect);
+}
+function renderTableSelectionControls(controls, wrap, table, selected, wrapRect) {
+  const { map, tableStart } = selected; const tableRect = table.getBoundingClientRect();
+  const left = tableRect.left - wrapRect.left + wrap.scrollLeft; const top = tableRect.top - wrapRect.top + wrap.scrollTop;
+  const columns = [...table.querySelectorAll('colgroup col')];
+  const widthAt = index => columns[index]?.getBoundingClientRect().width || tableRect.width / map.width;
+  const xAt = index => left + Array.from({ length: index }, (_, i) => widthAt(i)).reduce((a, b) => a + b, 0) + widthAt(index) / 2;
+  const rowRects = [...table.rows].map(row => row.getBoundingClientRect());
+  let html = `<button class="table-selector table-selector-corner" data-select-table aria-label="표 전체 선택" title="표 전체 선택" style="left:${left - 10}px;top:${top - 10}px">↖</button>`;
+  for (let row = 0; row < map.height; row++) {
+    const rect = rowRects[row]; if (!rect) continue;
+    html += `<button class="table-selector" data-select-row="${row}" aria-label="${row + 1}행 선택" title="${row + 1}행 선택" style="left:${left - 10}px;top:${rect.top - wrapRect.top + wrap.scrollTop + rect.height / 2 - 10}px">＋</button>`;
+  }
+  for (let col = 0; col < map.width; col++) html += `<button class="table-selector" data-select-column="${col}" aria-label="${col + 1}열 선택" title="${col + 1}열 선택" style="left:${xAt(col) - 10}px;top:${top - 10}px">＋</button>`;
+  controls.innerHTML = html; controls.hidden = false;
+}
+function selectTableRange(kind, index) {
+  const selected = selectedRect(editor.state); const { map, tableStart } = selected; const doc = editor.state.doc;
+  const cellPosition = (row, col) => tableStart + map.map[row * map.width + col];
+  let selection;
+  if (kind === 'row') selection = CellSelection.rowSelection(doc.resolve(cellPosition(index, 0)), doc.resolve(cellPosition(index, map.width - 1)));
+  else if (kind === 'column') selection = CellSelection.colSelection(doc.resolve(cellPosition(0, index)), doc.resolve(cellPosition(map.height - 1, index)));
+  else selection = new CellSelection(doc.resolve(cellPosition(0, 0)), doc.resolve(cellPosition(map.height - 1, map.width - 1)));
+  editor.view.dispatch(editor.state.tr.setSelection(selection)); editor.commands.focus();
 }
 function renderMetadata() {
   $('document-notebook').textContent = $('breadcrumb-notebook').textContent = $('info-notebook').textContent = notebookName(current.notebook_id);
@@ -206,7 +312,7 @@ async function openNote(id, targetView = 'editor') {
   loading = true; clearTimeout(timer); current = clone(found); selectedPublic = savedPublic = Boolean(current.is_public); editVersion = persistedVersion = 0; saveError = null;
   editor?.destroy(); bubble.hidden = false; document.body.append(bubble);
   $('editor').replaceChildren(); $('document-title').value = current.title;
-  editor = createMemoEditor({ element: $('editor'), content: current.content, bubble,
+  editor = createMemoEditor({ element: $('editor'), content: current.content, bubble, imageName: imageNameApi(),
     onSlash: () => requestAnimationFrame(openInsert), onImage: file => run(() => prepareImage(file, 'body')),
     onPaste: payload => run(() => pasteIntoEditor(payload)),
     onUpdate: touch, onSelectionUpdate: updateToolbar, onTransaction: updateToolbar,
@@ -255,7 +361,7 @@ function renderNavigation() {
   const live = notes.filter(n => !n.deleted);
   $('count-all').textContent = live.length;
   $('count-favorites').textContent = live.filter(n => n.favorite).length;
-  $('notebook-list').innerHTML = notebooks.map(n => `<button class="nav-item ${notebookFilter === n.id && filter === 'notebook' ? 'active' : ''}" data-notebook="${escapeHTML(n.id)}">${icon('folder')}<span>${escapeHTML(n.name)}</span><span class="nav-count">${live.filter(item => item.notebook_id === n.id).length}</span></button>`).join('');
+  $('notebook-list').innerHTML = notebooks.map(n => `<div class="notebook-row"><button class="nav-item notebook-open ${notebookFilter === n.id && filter === 'notebook' ? 'active' : ''}" data-notebook="${escapeHTML(n.id)}">${icon('folder')}<span>${escapeHTML(n.name)}</span><span class="nav-count">${live.filter(item => item.notebook_id === n.id).length}</span></button><div class="notebook-actions"><button class="icon-button small" data-action="rename-notebook" data-notebook-id="${escapeHTML(n.id)}" aria-label="${escapeHTML(n.name)} 이름 수정" title="이름 수정">${icon('square-pen')}</button>${n.name === '일상 기록' ? '' : `<button class="icon-button small danger" data-action="delete-notebook" data-notebook-id="${escapeHTML(n.id)}" aria-label="${escapeHTML(n.name)} 삭제" title="삭제">${icon('trash-2')}</button>`}</div></div>`).join('');
   const tags = [...new Set(live.flatMap(n => n.tags))].sort((a, b) => a.localeCompare(b, 'ko'));
   $('sidebar-tags').innerHTML = tags.length ? tags.map(t => `<button class="${tagFilter === t ? 'active' : ''}" data-tag="${escapeHTML(t)}">#${escapeHTML(t)}</button>`).join('') : '<span class="demo-label">태그로 생각을 모아 보세요.</span>';
   document.querySelectorAll('[data-filter]').forEach(button => button.classList.toggle('active', button.dataset.filter === filter));
@@ -345,7 +451,7 @@ async function applyFilter(next, value = '') {
   blogScroll = 0; blogCards = []; blogCursor = null; renderNavigation(); await changeView('blog', false);
 }
 const insertItems = [
-  ['image', '사진', '사진과 함께 기억하기', 'image'], ['taskList', '체크리스트', '오늘의 할 일', 'list-todo'],
+  ['image', '사진', '사진과 함께 기억하기', 'image'], ['file', '파일 첨부', '문서·압축 파일 20MB까지', 'paperclip'], ['taskList', '체크리스트', '오늘의 할 일', 'list-todo'],
   ['h2', '제목', '문단을 나누는 제목', 'file-text'], ['bulletList', '글머리 목록', '생각을 차례로 정리', 'list'],
   ['orderedList', '번호 목록', '순서가 있는 기록', 'list'], ['blockquote', '인용문', '기억하고 싶은 한 문장', 'quote'],
   ['horizontalRule', '구분선', '잠깐 쉬어 가기', 'minus'], ['codeBlock', '코드 블록', '개발 메모 남기기', 'code'],
@@ -355,15 +461,49 @@ const insertItems = [
 function renderInsert() {
   const term = $('insert-search').value.trim().toLowerCase();
   const items = [...insertItems];
-  if (editor?.isActive('table')) items.push(['addRow', '표 행 추가', '선택한 행 아래', 'rows-3'], ['addColumn', '표 열 추가', '선택한 열 오른쪽', 'columns-3'], ['deleteRow', '표 행 삭제', '선택한 행 삭제', 'minus'], ['deleteColumn', '표 열 삭제', '선택한 열 삭제', 'minus'], ['deleteTable', '표 삭제', '선택한 표 삭제', 'trash-2']);
   $('insert-items').innerHTML = items.filter(item => item.join(' ').toLowerCase().includes(term)).map(([command, label, hint, name]) => `<button class="insert-item" data-insert="${command}">${icon(name)}<span>${label}<small>${hint}</small></span></button>`).join(''); refreshIcons();
 }
 function openInsert() { rememberSelection(); $('insert-search').value = ''; renderInsert(); showDialog('insert-dialog', 'insert-search'); }
 function execute(command) {
   if (!editor) return;
   const chain = editor.chain().focus();
-  const commands = { bold: 'toggleBold', italic: 'toggleItalic', underline: 'toggleUnderline', strike: 'toggleStrike', bulletList: 'toggleBulletList', orderedList: 'toggleOrderedList', taskList: 'toggleTaskList', blockquote: 'toggleBlockquote', codeBlock: 'toggleCodeBlock', horizontalRule: 'setHorizontalRule', paragraph: 'setParagraph', undo: 'undo', redo: 'redo', addRow: 'addRowAfter', addColumn: 'addColumnAfter', deleteRow: 'deleteRow', deleteColumn: 'deleteColumn', deleteTable: 'deleteTable' };
+  const commands = { bold: 'toggleBold', italic: 'toggleItalic', underline: 'toggleUnderline', strike: 'toggleStrike', bulletList: 'toggleBulletList', orderedList: 'toggleOrderedList', taskList: 'toggleTaskList', blockquote: 'toggleBlockquote', codeBlock: 'toggleCodeBlock', horizontalRule: 'setHorizontalRule', paragraph: 'setParagraph', undo: 'undo', redo: 'redo', addRow: 'addRowAfter', addColumn: 'addColumnAfter', deleteRow: 'deleteRow', deleteColumn: 'deleteColumn', deleteTable: 'deleteTable', mergeCells: 'mergeCells', splitCell: 'splitCell' };
   if (commands[command]) chain[commands[command]]().run();
+  else if (command === 'fitColumns') {
+    const { map, table, tableStart, left, right } = selectedRect(editor.state); const tablePos = tableStart - 1;
+    const dom = editor.view.nodeDOM(tablePos); const tableDOM = dom instanceof HTMLTableElement ? dom : dom?.querySelector?.('table');
+    const colDOM = [...(tableDOM?.querySelectorAll('colgroup col') || [])]; const fallback = tableDOM?.getBoundingClientRect().width / map.width || 90;
+    const widths = Array.from({ length: map.width }, (_, i) => colDOM[i]?.getBoundingClientRect().width || fallback);
+    const targetWidth = widths.slice(left, right).reduce((sum, width) => sum + width, 0) / (right - left);
+    const tr = editor.state.tr; const selectedColumns = new Set(Array.from({ length: right - left }, (_, i) => left + i));
+    table.descendants((node, pos) => {
+      if (!['tableCell', 'tableHeader'].includes(node.type.name)) return;
+      const rect = map.findCell(pos); const colwidth = Array.from({ length: node.attrs.colspan }, (_, i) => selectedColumns.has(rect.left + i) ? Math.round(targetWidth) : Math.round(widths[rect.left + i] || fallback));
+      if (!node.attrs.colwidth || colwidth.some((width, i) => width !== node.attrs.colwidth[i])) tr.setNodeMarkup(tablePos + 1 + pos, undefined, { ...node.attrs, colwidth });
+    });
+    if (tr.docChanged) editor.view.dispatch(tr);
+    editor.commands.focus();
+  }
+  else if (command === 'deleteSelection') {
+    const selection = editor.state.selection;
+    if (selection instanceof CellSelection) {
+      const rect = selectedRect(editor.state);
+      if (rect.left === 0 && rect.right === rect.map.width && rect.top === 0 && rect.bottom === rect.map.height) { editor.commands.deleteTable(); return; }
+      if (selection.isRowSelection()) { editor.commands.deleteRow(); return; }
+      if (selection.isColSelection()) { editor.commands.deleteColumn(); return; }
+    }
+    const cells = [];
+    if (typeof selection.forEachCell === 'function') selection.forEachCell((node, pos) => cells.push({ node, pos }));
+    else {
+      const { $from } = selection; let depth = $from.depth;
+      while (depth > 0 && !['tableCell', 'tableHeader'].includes($from.node(depth).type.name)) depth--;
+      if (depth > 0) cells.push({ node: $from.node(depth), pos: $from.before(depth) });
+    }
+    const tr = editor.state.tr;
+    cells.sort((a, b) => b.pos - a.pos).forEach(({ node, pos }) => { const blank = node.type.createAndFill(); if (blank) tr.replaceWith(pos, pos + node.nodeSize, blank); });
+    if (tr.docChanged) editor.view.dispatch(tr);
+    editor.commands.focus();
+  }
   else if (/^h[234]$/.test(command)) chain.toggleHeading({ level: Number(command[1]) }).run();
   else if (command === 'highlight') chain.toggleHighlight({ color: '#695325' }).run();
   else if (command === 'table') chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
@@ -380,6 +520,21 @@ async function prepareImage(file, purpose) {
   pendingImage = uploaded; $('image-preview').src = uploaded.url; $('image-alt').value = ''; $('image-caption').value = '';
   showDialog('image-dialog', 'image-alt');
 }
+const ATTACHMENT_EXT = /\.(pdf|docx?|xlsx?|pptx?|hwpx?|txt|csv|md|rtf|od[tsp]|zip|7z)$/i;
+async function attachFile(file) {
+  if (!current || !file) return;
+  if (!ATTACHMENT_EXT.test(file.name)) { toast('PDF, 문서, 스프레드시트, 프레젠테이션, 텍스트, 압축 파일만 첨부할 수 있어요.'); return; }
+  if (file.size === 0) { toast('빈 파일은 첨부할 수 없어요.'); return; }
+  if (file.size > 20 * 1024 * 1024) { toast('20MB 이하의 파일만 첨부할 수 있어요.'); return; }
+  const noteId = current.id;
+  toast('파일을 업로드하고 있어요…');
+  const uploaded = await adapter.uploadFile(file);
+  if (!current || current.id !== noteId || editor.isDestroyed) { toast('다른 메모로 이동해 첨부하지 못했어요. 다시 시도해 주세요.'); return; }
+  restoreSelection();
+  editor.chain().focus().insertContent({ type: 'fileAttachment', attrs: { id: uploaded.id, name: uploaded.name, size: uploaded.size } }).run();
+  toast('파일을 첨부했어요.');
+}
+function chooseAttachment() { rememberSelection(); $('attachment-file').value = ''; $('attachment-file').click(); }
 function chooseImage(purpose) { imagePurpose = purpose; rememberSelection(); $('image-file').value = ''; $('image-file').click(); }
 function findExternalImageSources(doc) {
   const sources = [];
@@ -400,7 +555,7 @@ function findTextMatch(value) {
     const index = node.isText ? node.text.indexOf(value) : -1;
     if (!match && index >= 0) match = { from: pos + index, to: pos + index + value.length };
   });
-  return data;
+  return match;
 }
 
 /**
@@ -434,8 +589,6 @@ function applyConfig(config) {
 }
 // Export applyConfig for testing purposes
 export { applyConfig };
-// Export replaceTextMarker for regression testing purposes.
-export { replaceTextMarker };
 function replaceTextMarker(value, replacement) {
   const match = findTextMatch(value);
   return match ? editor.commands.insertContentAt(match, replacement) : false;
@@ -574,24 +727,59 @@ const actions = {
   home: () => changeView('blog'), new: () => createNote(), today: () => createNote(true), save: saveAndOpenBlog,
   read: () => changeView('reader'), edit: () => changeView('editor'), 'back-blog': () => changeView('blog'),
   search: async () => { if (await changeView('blog')) $('blog-search').focus(); }, insert: openInsert,
+  'image-edit': () => {
+    if (!editor?.isActive('image')) return;
+    const imageNode = editor.view.nodeDOM(editor.state.selection.from);
+    imageNode?.dispatchEvent(new imageNode.ownerDocument.defaultView.CustomEvent('memo-image-edit'));
+    updateToolbar();
+  },
   link: () => { rememberSelection(); $('link-url').value = editor.getAttributes('link').href || ''; showDialog('link-dialog', 'link-url'); },
   tags: () => { $('tags-input').value = current.tags.join(', '); showDialog('tags-dialog', 'tags-input'); },
   metadata: () => { $('meta-notebook').innerHTML = notebooks.map(n => `<option value="${escapeHTML(n.id)}">${escapeHTML(n.name)}</option>`).join(''); $('meta-notebook').value = current.notebook_id; $('meta-date').value = current.document_date; $('meta-private').checked = !selectedPublic; updateVisibilityHelp(); showDialog('metadata-dialog'); },
   'add-notebook': () => { $('notebook-name').value = ''; showDialog('notebook-dialog', 'notebook-name'); },
+  'line-height': () => {
+    const menu = $('line-height-menu'); menu.hidden = !menu.hidden;
+    $('line-height-button').setAttribute('aria-expanded', String(!menu.hidden));
+  },
+  'rename-notebook': button => {
+    const notebook = notebooks.find(item => item.id === button.dataset.notebookId); if (!notebook) return;
+    editingNotebookId = notebook.id; $('notebook-rename-name').value = notebook.name; showDialog('notebook-rename-dialog', 'notebook-rename-name');
+  },
+  'delete-notebook': async button => {
+    if (!(await ensureSaved())) return;
+    const target = notebooks.find(item => item.id === button.dataset.notebookId); if (!target) return;
+    const count = notes.filter(item => item.notebook_id === target.id).length;
+    const message = count ? `“${target.name}” 메모장을 삭제할까요? 포함된 메모 ${count}개는 “일상 기록”으로 이동합니다.` : `“${target.name}” 메모장을 삭제할까요?`;
+    if (!(await confirmAction(message, '삭제'))) return;
+    const result = await adapter.deleteNotebook(target.id); const fallback = result.fallback_notebook;
+    notes.forEach(note => { if (note.notebook_id === target.id) note.notebook_id = fallback.id; });
+    if (current?.notebook_id === target.id) { current.notebook_id = fallback.id; renderMetadata(); }
+    notebooks = notebooks.filter(item => item.id !== target.id);
+    if (!notebooks.some(item => item.id === fallback.id)) notebooks.unshift(fallback);
+    if (notebookFilter === target.id) { filter = 'all'; notebookFilter = ''; activeFilterLabel = '전체 기록'; }
+    renderNavigation(); if (view === 'blog') await renderBlog(true);
+    toast(result.moved_count ? `메모 ${result.moved_count}개를 일상 기록으로 옮기고 메모장을 삭제했어요.` : '메모장을 삭제했어요.');
+  },
   favorite: async () => { current.favorite = !current.favorite; renderMetadata(); touch(); await saveCurrent(); },
   cover: () => chooseImage('cover'), 'remove-cover': () => { current.cover = null; renderMetadata(); touch(); },
   icon: () => { const choices = ['', '✍️', '🌿', '💡', '📖', '☕']; current.icon = choices[(choices.indexOf(current.icon || '') + 1) % choices.length]; renderMetadata(); touch(); },
   help: () => showDialog('help-dialog'),
-  settings: () => { $('body-size').value = prefs.bodySize; $('autosave-toggle').checked = prefs.autosave; showDialog('settings-dialog'); },
+  settings: () => { $('body-size').value = prefs.bodySize; $('autosave-toggle').checked = prefs.autosave; renderShortcuts(); showDialog('settings-dialog'); },
   'retry-images': recoverExternalImages,
   export: downloadCurrent,
   delete: async () => { if (!(await confirmAction('이 기록을 휴지통으로 옮길까요? 휴지통에서 다시 복원할 수 있어요.', '휴지통으로'))) return; await updateStoredNote(current.id, { deleted: true }); current = null; editVersion = persistedVersion = 0; await changeView('blog'); toast('휴지통으로 옮겼어요.'); },
   'clear-filters': async () => { $('blog-search').value = ''; $('month-filter').value = ''; await applyFilter('all'); },
 };
 document.addEventListener('click', event => {
+  const selector = event.target.closest('[data-select-row],[data-select-column],[data-select-table]');
+  if (selector) { event.preventDefault(); if (selector.hasAttribute('data-select-row')) selectTableRange('row', Number(selector.dataset.selectRow)); else if (selector.hasAttribute('data-select-column')) selectTableRange('column', Number(selector.dataset.selectColumn)); else selectTableRange('table'); return; }
+  const cellAction = event.target.closest('[data-cell-action]');
+  if (cellAction) { event.preventDefault(); execute(cellAction.dataset.cellAction); return; }
+  if (!event.target.closest('.line-height-control')) { $('line-height-menu').hidden = true; $('line-height-button').setAttribute('aria-expanded', 'false'); }
   const close = event.target.closest('[data-close]'); if (close) { close.closest('dialog').close(); return; }
   const button = event.target.closest('button,a'); if (!button || button.disabled) return;
-  if (button.dataset.action) { event.preventDefault(); run(() => actions[button.dataset.action]?.()); }
+  if (button.dataset.action) { event.preventDefault(); run(() => actions[button.dataset.action]?.(button)); }
+  else if (button.dataset.lineHeight) { setBlockLineHeight(editor, button.dataset.lineHeight); $('line-height-menu').hidden = true; $('line-height-button').setAttribute('aria-expanded', 'false'); editor.commands.focus(); }
   else if (button.dataset.command) execute(button.dataset.command);
   else if (button.dataset.view) run(() => changeView(button.dataset.view));
   else if (button.dataset.filter) run(() => button.dataset.filter === 'today' ? createNote(true) : applyFilter(button.dataset.filter));
@@ -602,10 +790,11 @@ document.addEventListener('click', event => {
   else if (button.dataset.cardFavorite) run(() => updateStoredNote(button.dataset.cardFavorite, { favorite: !notes.find(n => n.id === button.dataset.cardFavorite).favorite }));
   else if (button.dataset.restore) run(async () => { await updateStoredNote(button.dataset.restore, { deleted: false }); toast('기록을 복원했어요.'); });
   else if (button.dataset.layout) { const compact = button.dataset.layout === 'compact'; $('blog-feed').classList.toggle('compact', compact); document.querySelectorAll('[data-layout]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); }); blogMasonry?.layout(); }
-  else if (button.dataset.insert) { $('insert-dialog').close(); restoreSelection(); if (button.dataset.insert === 'image') chooseImage('body'); else execute(button.dataset.insert); }
+  else if (button.dataset.insert) { $('insert-dialog').close(); restoreSelection(); if (button.dataset.insert === 'image') chooseImage('body'); else if (button.dataset.insert === 'file') chooseAttachment(); else execute(button.dataset.insert); }
 });
 // Prevent formatting buttons from collapsing an existing text selection.
-document.addEventListener('mousedown', event => { if (event.target.closest('[data-command], #bubble-menu [data-action=link]')) event.preventDefault(); });
+document.addEventListener('mousedown', event => { if (event.target.closest('[data-command], [data-cell-action], .line-height-control button, #bubble-menu [data-action=link]')) event.preventDefault(); });
+document.addEventListener('memo-image-edit-state', updateToolbar);
 $('document-title').addEventListener('input', () => { autoHeight(); touch(); });
 $('editor').addEventListener('compositionstart', () => { composing = true; clearTimeout(timer); });
 $('editor').addEventListener('compositionend', () => { composing = false; if (isDirty() && prefs.autosave) timer = setTimeout(() => run(saveCurrent), 1500); });
@@ -613,13 +802,45 @@ $('document-title').addEventListener('compositionstart', () => { composing = tru
 $('document-title').addEventListener('compositionend', () => { composing = false; touch(); });
 $('block-type').addEventListener('change', event => execute(event.target.value));
 $('font-family').addEventListener('change', event => editor.chain().focus().setFontFamily(event.target.value).run());
-$('font-size').addEventListener('change', event => editor.chain().focus().setFontSize(event.target.value).run());
-$('line-height').addEventListener('change', event => { const chain = editor.chain().focus(); if (event.target.value) chain.setLineHeight(event.target.value).run(); else chain.unsetLineHeight().run(); });
+// 글자 크기: 목록 값 선택 또는 '직접입력'(8~96px). 목록에 없는 값은 임시 option 으로 표시한다.
+const FONT_SIZE_MIN = 8, FONT_SIZE_MAX = 96;
+function syncFontSizeSelect(value) {
+  const select = $('font-size');
+  select.querySelectorAll('option[data-custom]').forEach(option => option.remove());
+  if (value && ![...select.options].some(option => option.value === value)) {
+    const option = document.createElement('option');
+    option.value = value; option.textContent = value.replace(/px$/, ''); option.dataset.custom = '';
+    select.insertBefore(option, select.querySelector('option[value="custom"]'));
+  }
+  select.value = value;
+}
+$('font-size').addEventListener('change', event => {
+  const select = event.target;
+  if (select.value !== 'custom') { editor.chain().focus().setFontSize(select.value).run(); return; }
+  const current = editor.getAttributes('textStyle').fontSize?.replace(/px$/, '') || '17';
+  const input = window.prompt(`글자 크기를 숫자로 입력하세요 (${FONT_SIZE_MIN}~${FONT_SIZE_MAX})`, current);
+  const size = input === null ? NaN : Number(input.trim());
+  if (!Number.isInteger(size) || size < FONT_SIZE_MIN || size > FONT_SIZE_MAX) {
+    if (input !== null) savedStatus('error', `글자 크기는 ${FONT_SIZE_MIN}~${FONT_SIZE_MAX} 사이의 정수여야 합니다.`);
+    syncFontSizeSelect(editor.getAttributes('textStyle').fontSize || '17px'); editor.commands.focus(); return;
+  }
+  editor.chain().focus().setFontSize(`${size}px`).run();
+  syncFontSizeSelect(`${size}px`);
+});
+function applyCustomLineHeight() {
+  const percent = Number($('line-height-custom-input').value);
+  const value = normalizeBlockLineHeight(percent / 100);
+  if (!value) { toast('줄간격은 100%에서 300% 사이로 입력해 주세요.'); $('line-height-custom-input').focus(); return; }
+  setBlockLineHeight(editor, value); $('line-height-menu').hidden = true; $('line-height-button').setAttribute('aria-expanded', 'false'); editor.commands.focus();
+}
+$('line-height-custom-apply').addEventListener('click', applyCustomLineHeight);
+$('line-height-custom-input').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); applyCustomLineHeight(); } });
 $('text-color').addEventListener('input', event => editor.chain().focus().setColor(event.target.value).run());
 $('blog-search').addEventListener('input', () => { if (adapter.mode !== 'django') { renderBlogLocal(); return; } clearTimeout(blogSearchTimer); blogSearchTimer = setTimeout(() => run(() => renderBlog(true)), 250); }); $('month-filter').addEventListener('change', () => run(() => renderBlog(true)));
 $('blog-load-more').addEventListener('click', () => run(() => renderBlog(false))); $('blog-retry').addEventListener('click', () => run(() => renderBlog(false)));
 $('clear-month').addEventListener('click', () => { $('month-filter').value = ''; run(() => renderBlog(true)); });
 $('insert-search').addEventListener('input', renderInsert);
+$('attachment-file').addEventListener('change', event => run(() => attachFile(event.target.files[0])));
 $('image-file').addEventListener('change', event => run(() => prepareImage(event.target.files[0], imagePurpose)));
 $('link-form').addEventListener('submit', event => {
   event.preventDefault(); const value = $('link-url').value.trim();
@@ -642,16 +863,50 @@ function updateVisibilityUI() {
   $('info-visibility').textContent = `${label}${pending ? ' · 저장 전' : ''}`;
 }
 $('notebook-form').addEventListener('submit', event => { event.preventDefault(); run(async () => { const name = $('notebook-name').value.trim(); if (!name) return; if (notebooks.some(n => n.name === name)) { toast('같은 이름의 메모장이 있어요.'); return; } const item = await adapter.addNotebook(name); notebooks.push(item); $('notebook-dialog').close(); renderNavigation(); if (view === 'blog') renderBlog(); toast('새 메모장을 만들었어요.'); }); });
+$('notebook-rename-form').addEventListener('submit', event => { event.preventDefault(); run(async () => {
+  const name = normalizeNotebookName($('notebook-rename-name').value);
+  if (!name || !editingNotebookId) return;
+  if (hasDuplicateNotebookName(notebooks, name, editingNotebookId)) { toast('같은 이름의 메모장이 있어요.'); return; }
+  const saved = await adapter.renameNotebook(editingNotebookId, name);
+  const notebook = notebooks.find(item => item.id === editingNotebookId); if (notebook) notebook.name = saved.name;
+  editingNotebookId = null; $('notebook-rename-dialog').close(); renderNavigation();
+  if (current) renderMetadata(); if (view === 'blog') await renderBlog(true); toast('메모장 이름을 수정했어요.');
+}); });
 $('image-form').addEventListener('submit', event => { event.preventDefault(); if (!pendingImage) return; $('image-dialog').close(); if (imagePurpose === 'cover') { current.cover = pendingImage.url; renderMetadata(); touch(); } else { restoreSelection(); editor.chain().focus().setImage({ src: pendingImage.url, alt: $('image-alt').value.trim(), caption: $('image-caption').value.trim(), width: '100%' }).run(); } pendingImage = null; });
 $('settings-form').addEventListener('submit', event => { event.preventDefault(); prefs = { bodySize: $('body-size').value, autosave: $('autosave-toggle').checked }; applyPrefs(); try { localStorage.setItem('smartmemo-ui-prefs', JSON.stringify(prefs)); } catch { toast('화면 설정을 이 기기에 보관하지 못했어요.'); } $('settings-dialog').close(); if (prefs.autosave && isDirty()) run(saveCurrent); else clearTimeout(timer); });
+$('shortcut-editor').addEventListener('change', event => {
+  const input = event.target.closest('[data-shortcut-index]'); if (!input) return;
+  const index = Number(input.dataset.shortcutIndex); const key = normalizeShortcut(input.value);
+  if (!key) { toast('Ctrl+Shift+R 형식의 키 조합을 입력해 주세요.'); renderShortcuts(); return; }
+  if (shortcuts.some((item, i) => i !== index && item.key === key)) { toast('이미 사용 중인 단축키입니다.'); renderShortcuts(); return; }
+  shortcuts[index].key = key; saveShortcuts(); renderShortcuts();
+});
+$('shortcut-editor').addEventListener('click', event => {
+  const button = event.target.closest('[data-shortcut-remove]'); if (!button) return;
+  shortcuts.splice(Number(button.dataset.shortcutRemove), 1); saveShortcuts(); renderShortcuts();
+});
+$('shortcut-add').addEventListener('click', () => {
+  const action = $('shortcut-new-action').value; const key = normalizeShortcut($('shortcut-new-key').value);
+  if (!action || !key) { toast('명령과 Ctrl+Shift+R 형식의 키 조합을 지정해 주세요.'); return; }
+  if (shortcuts.some(item => item.action === action || item.key === key)) { toast('명령이나 단축키가 이미 등록되어 있습니다.'); return; }
+  shortcuts.push({ action, key }); saveShortcuts(); $('shortcut-new-key').value = ''; renderShortcuts();
+});
 $('save-status').addEventListener('click', () => { if (saveError?.code === 'conflict') downloadCurrent(); });
 function applyPrefs() { document.documentElement.style.setProperty('--body-size', `${prefs.bodySize}px`); $('autosave-label').textContent = prefs.autosave ? (adapter?.mode === 'django' ? '서버 자동 저장' : '브라우저 자동 저장') : '자동 저장 꺼짐'; }
 document.addEventListener('keydown', event => {
   if (event.isComposing) return;
-  if (!(event.ctrlKey || event.metaKey)) return;
-  const key = event.key.toLowerCase();
-  if (key === 's') { event.preventDefault(); if (current) run(saveInEditor); }
-  if (key === 'k') { event.preventDefault(); if (event.shiftKey && view === 'editor') actions.link(); else run(actions.search); }
+  const target = event.target;
+  if (target?.matches?.('input,textarea,select') && !target.closest('#editor')) return;
+  const key = eventShortcut(event); if (!key) return;
+  const binding = shortcuts.find(item => item.key === key); if (!binding) return;
+  event.preventDefault();
+  const command = binding.action;
+  if (command === 'save') { if (current) run(saveInEditor); }
+  else if (command === 'search') run(actions.search);
+  else if (command === 'link') { if (view === 'editor') run(actions.link); }
+  else if (command.startsWith('align')) { const value = { alignLeft: 'left', alignCenter: 'center', alignRight: 'right' }[command]; editor.chain().focus().setTextAlign(value).run(); }
+  else if (command === 'insert') openInsert();
+  else if (['bold','italic','underline','strike','undo','redo','bulletList','orderedList','taskList','blockquote','codeBlock'].includes(command)) execute(command);
 });
 window.addEventListener('beforeunload', event => { if (isDirty()) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('pagehide', () => { if (isDirty()) run(saveCurrent); });
@@ -668,6 +923,18 @@ window.addEventListener('resize', viewportChanged); window.visualViewport?.addEv
 document.addEventListener('focusin', viewportChanged); document.addEventListener('focusout', () => setTimeout(viewportChanged, 80));
 
 async function init() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('smartmemo-shortcuts'));
+    if (Array.isArray(stored)) {
+      const legacyDefaults = Object.fromEntries(defaultShortcuts.map(item => [item.action, item.key]));
+      const valid = stored.filter(item => shortcutActions.some(([id]) => id === item.action) && normalizeShortcut(item.key)).map(item => {
+        const old = { save: 's', search: 'k', link: 'shift+k', bold: 'b', italic: 'i', underline: 'u', strike: 'shift+x', undo: 'z', redo: 'shift+z', alignLeft: 'shift+l', alignCenter: 'shift+e', alignRight: 'shift+r', bulletList: 'shift+8', orderedList: 'shift+7', taskList: 'shift+9', blockquote: 'shift+q', codeBlock: 'shift+c' };
+        return { action: item.action, key: item.key === old[item.action] ? legacyDefaults[item.action] : normalizeShortcut(item.key) };
+      });
+      if (new Set(valid.map(item => item.key)).size === valid.length) shortcuts = valid.map(item => ({ action: item.action, key: normalizeShortcut(item.key) }));
+    }
+  } catch {}
+  renderShortcuts();
   config = JSON.parse($('smartmemo-config').textContent);
   config.assetBase ||= './assets/'; adapter = createAdapter(config); await adapter.init();
   // Fetch UI configuration from the server in Django mode
@@ -691,7 +958,9 @@ async function init() {
       try { notes = await adapter.list(); renderNavigation(); if (view === 'blog') renderBlog(); if (event.data.id === current?.id) toast('다른 탭에서 이 기록이 변경됐어요. 저장 시 충돌 여부를 확인합니다.'); } catch (error) { report(error); }
     };
   }
-  const initialId = config.initialNoteId || notes.filter(n => !n.deleted).sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0]?.id;
+  // 로그인/재방문 시 마지막 편집 화면이 아니라 블로그 목록으로 시작한다. 특정 글은 명시적으로 지정된 경우에만 연다.
+  // 데모(로그인 없음)는 기존처럼 가장 최근 글을 열고, 로그인 환경에서는 명시한 글이 없으면 목록으로 시작한다.
+  const initialId = config.initialNoteId || (adapter.mode === 'demo' ? notes.filter(n => !n.deleted).sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0]?.id : null);
   if (initialId) await openNote(initialId, query.get('view') === 'read' ? 'reader' : 'editor');
   else await changeView('blog', false);
   if (query.get('view') === 'blog') await changeView('blog');
@@ -699,9 +968,20 @@ async function init() {
   refreshIcons(); document.body.dataset.ready = 'true';
   window.SmartMemo = Object.freeze({
     flush: saveCurrent,
+    replaceTextMarker,
     getSnapshot: () => current ? clone({ ...current, content: editor.getJSON() }) : null,
     exportJSON: downloadCurrent,
     destroy: () => { if (disposed) return; disposed = true; clearTimeout(timer); clearTimeout(toastTimer); editor?.destroy(); readerEditor?.destroy(); channel?.close(); adapter.close(); },
   });
 }
+// 로그아웃 전에 저장하지 않은 편집 내용을 먼저 저장한다. 저장에 실패하면 내용 유실을 막기 위해 로그아웃하지 않는다.
+document.addEventListener('submit', event => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.action.endsWith('/logout/') || form.dataset.saved === 'true') return;
+  event.preventDefault();
+  run(async () => {
+    if (!(await ensureSaved())) return;
+    form.dataset.saved = 'true'; form.submit();
+  });
+});
 init().catch(error => { console.error(error); $('boot-error').textContent = error.message || '편집기를 열지 못했어요. 실행 환경을 확인해 주세요.'; $('boot-error').hidden = false; document.querySelectorAll('.view').forEach(v => { v.hidden = true; }); });

@@ -38,6 +38,10 @@ class BrowserAdapter {
       tx.oncomplete = resolve; tx.onabort = () => reject(new StoreError('처음 메모를 준비하지 못했어요.'));
     });
   }
+  /** Stub for imageInfo – demo adapter does not support it */
+  async imageInfo() { return null; }
+  /** Stub for renameImage – demo adapter does not support it */
+  async renameImage() { return null; }
   async all(store) {
     return new Promise((resolve, reject) => {
       const req = this.db.transaction(store).objectStore(store).getAll();
@@ -73,6 +77,65 @@ class BrowserAdapter {
     });
     return item;
   }
+  async renameNotebook(id, name) {
+    const tx = this.db.transaction('notebooks', 'readwrite');
+    const store = tx.objectStore('notebooks');
+    const req = store.get(id);
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => {
+        const existing = req.result;
+        if (!existing) {
+          reject(new StoreError('메모장을 찾을 수 없어요.', 'not_found'));
+          return;
+        }
+        if (existing.name === name) {
+          resolve({ id, name });
+          return;
+        }
+        const getAllReq = store.getAll();
+        getAllReq.onsuccess = () => {
+          const dup = getAllReq.result.find(item => item.name === name && item.id !== id);
+          if (dup) {
+            reject(new StoreError('같은 이름의 메모장이 이미 있어요.', 'duplicate'));
+            return;
+          }
+          existing.name = name;
+          const putReq = store.put(existing);
+          putReq.onsuccess = () => resolve({ id, name });
+          putReq.onerror = () => reject(new StoreError('저장 실패', 'storage_error'));
+        };
+        getAllReq.onerror = () => reject(new StoreError('데이터베이스 접근 실패', 'storage_error'));
+      };
+      req.onerror = () => reject(new StoreError('데이터베이스 접근 실패', 'storage_error'));
+    });
+  }
+  async deleteNotebook(id) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(['notes', 'notebooks'], 'readwrite');
+      const notebooks = tx.objectStore('notebooks'); const notes = tx.objectStore('notes');
+      let result; let problem;
+      const targetRequest = notebooks.get(id);
+      targetRequest.onsuccess = () => {
+        const target = targetRequest.result;
+        if (!target) { problem = new StoreError('메모장을 찾을 수 없어요.', 'not_found'); tx.abort(); return; }
+        if (target.name === '일상 기록') { problem = new StoreError('기본 메모장인 일상 기록은 삭제할 수 없어요.', 'default_notebook'); tx.abort(); return; }
+        const allRequest = notebooks.getAll();
+        allRequest.onsuccess = () => {
+          const fallback = allRequest.result.find(item => item.name === '일상 기록');
+          if (!fallback) { problem = new StoreError('일상 기록 메모장을 찾을 수 없어요.', 'not_found'); tx.abort(); return; }
+          const noteRequest = notes.getAll();
+          noteRequest.onsuccess = () => {
+            let moved = 0;
+            noteRequest.result.forEach(note => { if (note.notebook_id === id) { note.notebook_id = fallback.id; notes.put(note); moved++; } });
+            notebooks.delete(id); result = { deleted_id: id, fallback_notebook: fallback, moved_count: moved };
+          };
+        };
+      };
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(problem ?? new StoreError('메모장을 삭제하지 못했어요.'));
+    });
+  }
+  async uploadFile() { throw new StoreError('파일 첨부는 서버에 연결된 환경에서만 사용할 수 있어요.'); }
   async upload(file) {
     if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) throw new StoreError('JPG, PNG, WebP, GIF 사진을 선택해 주세요.');
     if (file.size > 5 * 1024 * 1024) throw new StoreError('데모에서는 5MB 이하의 사진을 사용할 수 있어요.');
@@ -120,7 +183,7 @@ class DjangoAdapter {
     }
     if (response.status === 401 || response.status === 403) throw new StoreError('로그인 또는 저장 권한을 확인해 주세요. 현재 내용은 화면에 유지됩니다.', 'auth');
     if (response.status === 409) throw new StoreError('다른 기기에서 수정됐어요. 현재 내용을 JSON으로 보관한 뒤 다시 열어 주세요.', 'conflict');
-    if (!response.ok) throw new StoreError(data?.error?.message || `요청을 완료하지 못했어요. (${response.status})`, data?.error?.code || 'http');
+    if (!response.ok) throw new StoreError(data?.error?.message || (typeof data?.detail === 'string' ? data.detail : null) || `요청을 완료하지 못했어요. (${response.status})`, data?.error?.code || 'http');
     return data;
   }
   async list() { const data = await this.request('/notes/'); return data.items; }
@@ -128,7 +191,25 @@ class DjangoAdapter {
   async notebooks() { const data = await this.request('/notebooks/'); return data.items; }
   async save(note) { return this.request(`/notes/${encodeURIComponent(note.id)}/`, { method: 'PUT', body: JSON.stringify(note) }); }
   async addNotebook(name) { return this.request('/notebooks/', { method: 'POST', body: JSON.stringify({ name }) }); }
+  async renameNotebook(id, name) { return this.request(`/notebooks/${encodeURIComponent(id)}/rename/`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); }
+  async deleteNotebook(id) { return this.request(`/notebooks/${encodeURIComponent(id)}/delete/`, { method: 'DELETE' }); }
   async upload(file) { const body = new FormData(); body.append('file', file); return this.request('/images/', { method: 'POST', body }); }
+  async uploadFile(file) { const body = new FormData(); body.append('file', file); return this.request('/files/', { method: 'POST', body }); }
   async importImage(url) { return this.request('/images/import/', { method: 'POST', body: JSON.stringify({ url }) }); }
+  /**
+   * Retrieve image metadata from the server.
+   *
+   * @param {string} id - The UUID of the image.
+   * @returns {Promise<object>} The JSON response containing id, url, original_name.
+   */
+  async imageInfo(id) { return this.request(`/images/${encodeURIComponent(id)}/`); }
+  /**
+   * Rename the image on the server.
+   *
+   * @param {string} id - The UUID of the image.
+   * @param {string} name - The new name to set.
+   * @returns {Promise<object>} The JSON response containing updated fields.
+   */
+  async renameImage(id, name) { return this.request(`/images/${encodeURIComponent(id)}/`, { method: 'PATCH', body: JSON.stringify({ name }) }); }
   close() {}
 }

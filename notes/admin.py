@@ -26,8 +26,17 @@ class NoteAdmin(admin.ModelAdmin):
     list_display = ("id", "title")
 
 # Register the remaining models with the default admin interface.
-admin.site.register([Notebook, MemoImage])
- # Removed duplicate registration of ``Note`` to avoid AlreadyRegistered error.
+admin.site.register([Notebook])
+
+@admin.register(MemoImage)
+class MemoImageAdmin(admin.ModelAdmin):
+    list_display = ("original_name", "id", "owner", "content_type", "created_at")
+    list_display_links = ("original_name", "id")
+    search_fields = ("original_name", "owner__username")
+    list_filter = ("content_type", "created_at")
+    ordering = ("-created_at",)
+    list_select_related = ("owner",)
+# Removed duplicate registration of ``Note`` to avoid AlreadyRegistered error.
 
 
 @admin.register(AppSetting)

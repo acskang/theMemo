@@ -1,4 +1,4 @@
-import { Editor, Extension, mergeAttributes } from '@tiptap/core';
+import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import TextAlign from '@tiptap/extension-text-align';
@@ -22,6 +22,12 @@ export function safeImage(src) {
   try { const u = new URL(src); return ['https:', 'http:'].includes(u.protocol) ? src : ''; } catch { return ''; }
 }
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+export const BLOCK_LINE_HEIGHTS = ['1.5', '1.6', '1.7', '1.8', '1.85', '1.9', '2', '2.1'];
+export function normalizeBlockLineHeight(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 1 || number > 3) return null;
+  return String(Math.round(number * 100) / 100);
+}
 export function normalizeYouTubeURL(value) {
   if (typeof value !== 'string') return '';
   try {
@@ -68,8 +74,11 @@ export function normalizeImageAttrs(attrs = {}, src = attrs.src) {
     alignment: ['left', 'center', 'right'].includes(attrs.alignment) ? attrs.alignment : 'center',
   };
 }
+import { imageIdFromSrc, normalizeImageName } from './image-name.js';
+const imageNameCache = new Map();
+
 const CaptionImage = Image.extend({
-  addOptions() { return { ...this.parent?.(), openLinks: false, editable: true }; },
+  addOptions() { return { ...this.parent?.(), openLinks: false, editable: true, imageName: null }; },
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -96,6 +105,7 @@ const CaptionImage = Image.extend({
   },
   addNodeView() {
     if (!this.options.editable) return null;
+    const nameApi = this.options.imageName;
     return ({ node, editor, getPos, deleteNode }) => {
       const dom = document.createElement('figure');
       dom.className = 'memo-image-node'; dom.dataset.memoImage = ''; dom.contentEditable = 'false';
@@ -111,6 +121,14 @@ const CaptionImage = Image.extend({
       const reset = makeButton('원래 크기로 되돌리기', 'reset-size', '원래 크기');
       const link = makeButton('이미지 링크 편집', 'link', '링크');
       const remove = makeButton('이미지 삭제', 'delete', '삭제'); remove.className = 'danger';
+      // 이미지 이름 행: MemoImage.original_name 을 서버에 직접 저장한다(메모 본문, 자동 저장과 무관).
+      const nameRow = document.createElement('div'); nameRow.className = 'image-name-row'; nameRow.hidden = true;
+      const nameKey = Math.random().toString(36).slice(2, 10);
+      const nameLabel = document.createElement('label'); nameLabel.className = 'image-name-label'; nameLabel.textContent = '이름'; nameLabel.htmlFor = `image-name-${nameKey}`;
+      const nameInput = document.createElement('input'); nameInput.id = `image-name-${nameKey}`; nameInput.className = 'image-name-input'; nameInput.type = 'text'; nameInput.maxLength = 255; nameInput.autocomplete = 'off'; nameInput.spellcheck = false; nameInput.placeholder = '이미지 이름 입력';
+      const nameStatus = document.createElement('span'); nameStatus.id = `image-name-status-${nameKey}`; nameStatus.className = 'image-name-status'; nameStatus.setAttribute('role', 'status'); nameStatus.setAttribute('aria-live', 'polite');
+      nameInput.setAttribute('aria-describedby', nameStatus.id);
+      nameRow.append(nameLabel, nameInput, nameStatus); toolbar.append(nameRow);
       dom.append(toolbar);
       const popover = document.createElement('form'); popover.className = 'memo-image-link-popover'; popover.hidden = true;
       const linkInput = document.createElement('input'); linkInput.type = 'url'; linkInput.placeholder = 'https://…'; linkInput.setAttribute('aria-label', '이미지 이동 링크');
@@ -119,6 +137,10 @@ const CaptionImage = Image.extend({
       popover.append(linkInput, applyLink, removeLink); dom.append(popover);
       for (const corner of ['nw', 'ne', 'sw', 'se']) { const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'memo-image-resize-handle'; handle.dataset.corner = corner; handle.setAttribute('aria-label', `이미지 크기 조절 ${corner}`); dom.append(handle); }
       let currentNode = node, composing = false, drag = null;
+      const closeEditor = () => {
+        dom.classList.remove('is-editing'); popover.hidden = true;
+        dom.dispatchEvent(new dom.ownerDocument.defaultView.CustomEvent('memo-image-edit-state', { bubbles: true }));
+      };
       const updateAttrs = attrs => {
         const pos = getPos(); if (typeof pos !== 'number') return;
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, ...attrs }));
@@ -146,17 +168,48 @@ const CaptionImage = Image.extend({
         if (event.target.closest('.memo-image-toolbar,.memo-image-link-popover,.memo-image-caption,.memo-image-resize-handle')) return;
         const pos = getPos(); if (typeof pos === 'number') { editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos))); editor.commands.focus(); }
       });
+      dom.addEventListener('memo-image-edit', () => {
+        if (dom.classList.contains('is-editing')) {
+          closeEditor();
+          commitName();
+          editor.commands.focus();
+          return;
+        }
+        dom.classList.add('is-editing');
+        dom.dispatchEvent(new dom.ownerDocument.defaultView.CustomEvent('memo-image-edit-state', { bubbles: true }));
+        loadName();
+        requestAnimationFrame(() => size.focus());
+      });
       Object.entries(alignButtons).forEach(([value, button]) => button.addEventListener('click', () => updateAttrs({ alignment: value })));
       size.addEventListener('change', () => { const width = normalizeImageWidth(size.value); if (width === '100%' && size.value) { size.setCustomValidity('40~2400 사이의 숫자를 입력하세요.'); size.reportValidity(); return; } size.setCustomValidity(''); updateAttrs({ width }); });
       reset.addEventListener('click', () => updateAttrs({ width: '100%' }));
       remove.addEventListener('click', deleteNode);
       link.addEventListener('click', () => { popover.hidden = !popover.hidden; if (!popover.hidden) { linkInput.value = currentNode.attrs.linkUrl || ''; linkInput.focus(); } });
-      popover.addEventListener('submit', event => { event.preventDefault(); const value = normalizeDestinationURL(linkInput.value); if (linkInput.value.trim() && !value) { linkInput.setCustomValidity('http 또는 https 절대 주소를 입력하세요.'); linkInput.reportValidity(); return; } linkInput.setCustomValidity(''); updateAttrs({ linkUrl: value || null }); popover.hidden = true; });
+      popover.addEventListener('submit', event => { event.preventDefault(); const value = normalizeDestinationURL(linkInput.value); if (linkInput.value.trim() && !value) { linkInput.setCustomValidity('http 또는 https 절대 주소를 입력하세요.'); linkInput.reportValidity(); return; } linkInput.setCustomValidity(''); updateAttrs({ linkUrl: value || null }); closeEditor(); });
       removeLink.addEventListener('click', () => { linkInput.setCustomValidity(''); updateAttrs({ linkUrl: null }); popover.hidden = true; });
-      caption.addEventListener('compositionstart', () => { composing = true; });
-      caption.addEventListener('compositionend', () => { composing = false; updateAttrs({ caption: caption.textContent.slice(0, 300) }); });
-      caption.addEventListener('input', () => { if (!composing) updateAttrs({ caption: caption.textContent.slice(0, 300) }); });
-      caption.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) { event.preventDefault(); editor.commands[event.key.toLowerCase() === 'z' && !event.shiftKey ? 'undo' : 'redo'](); queueMicrotask(restoreCaptionFromState); } });
+       caption.addEventListener('compositionstart', () => { composing = true; });
+       caption.addEventListener('compositionend', () => { composing = false; updateAttrs({ caption: caption.textContent.slice(0, 300) }); });
+       caption.addEventListener('input', () => { if (!composing) updateAttrs({ caption: caption.textContent.slice(0, 300) }); });
+       // Handle paste: strip any formatting and insert plain text only
+       caption.addEventListener('paste', event => {
+         event.preventDefault();
+         const plainText = event.clipboardData?.getData('text/plain') ?? '';
+         const sel = window.getSelection();
+         if (!sel || sel.rangeCount === 0) return;
+         const range = sel.getRangeAt(0);
+         // Replace the selected text (or insert at caret)
+         range.deleteContents();
+         const textNode = document.createTextNode(plainText);
+         range.insertNode(textNode);
+         // Move cursor after inserted text
+         range.setStartAfter(textNode);
+         range.collapse(true);
+         sel.removeAllRanges();
+         sel.addRange(range);
+         // Update the node's caption attribute
+         updateAttrs({ caption: caption.textContent.slice(0, 300) });
+       });
+       caption.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) { event.preventDefault(); editor.commands[event.key.toLowerCase() === 'z' && !event.shiftKey ? 'undo' : 'redo'](); queueMicrotask(restoreCaptionFromState); } });
       dom.querySelectorAll('.memo-image-resize-handle').forEach(handle => {
         handle.addEventListener('pointerdown', event => { event.preventDefault(); drag = { id: event.pointerId, x: event.clientX, width: currentWidth(), sign: handle.dataset.corner.endsWith('w') ? -1 : 1 }; handle.setPointerCapture?.(event.pointerId); });
         handle.addEventListener('pointermove', event => { if (!drag || drag.id !== event.pointerId) return; const width = Math.max(40, Math.min(2400, Math.round(drag.width + (event.clientX - drag.x) * drag.sign))); dom.style.width = `${width}px`; dom.dataset.dragWidth = String(width); });
@@ -164,23 +217,122 @@ const CaptionImage = Image.extend({
         handle.addEventListener('pointerup', finish); handle.addEventListener('pointercancel', () => { drag = null; delete dom.dataset.dragWidth; sync(); });
         handle.addEventListener('keydown', event => { if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); const delta = (event.shiftKey ? 50 : 10) * (event.key === 'ArrowRight' ? 1 : -1); updateAttrs({ width: Math.max(40, Math.min(2400, currentWidth() + delta)) }); });
       });
+      let nameSaved = null, nameSaving = null, nameTimer = 0, nameRequest = 0;
+      const nameId = () => imageIdFromSrc(currentNode.attrs.src);
+      const showName = (text, kind = '') => { nameStatus.textContent = text; nameStatus.dataset.kind = kind; };
+      const setNameReady = value => { nameSaved = value; nameInput.value = value; nameInput.disabled = false; };
+      const loadName = async () => {
+        const id = nameId();
+        if (!nameApi || !id) { nameRow.hidden = true; return; }
+        nameRow.hidden = false;
+        clearTimeout(nameTimer);
+        if (imageNameCache.has(id)) { setNameReady(imageNameCache.get(id)); showName(''); return; }
+        const request = ++nameRequest;
+        nameSaved = null; nameInput.disabled = true; nameInput.value = ''; showName('불러오는 중…');
+        try {
+          const value = await nameApi.load(id);
+          if (typeof value !== 'string') throw new Error('invalid');
+          imageNameCache.set(id, value);
+          if (request === nameRequest && nameId() === id) { setNameReady(value); showName(''); }
+        } catch { if (request === nameRequest) showName('이름을 불러오지 못했어요', 'error'); }
+      };
+      const commitName = async () => {
+        const id = nameId();
+        if (!nameApi || !id || nameSaved === null || nameInput.disabled) return;
+        const name = normalizeImageName(nameInput.value);
+        if (name === null) { nameInput.value = nameSaved; showName('이름은 1~255자로 입력해 주세요', 'error'); return; }
+        if (name === nameSaved || name === nameSaving) { nameInput.value = name; return; }
+        nameSaving = name; showName('저장 중…');
+        const request = ++nameRequest;
+        try {
+          const value = await nameApi.save(id, name);
+          if (typeof value !== 'string') throw new Error('invalid');
+          imageNameCache.set(id, value);
+          if (request === nameRequest && nameId() === id) { setNameReady(value); showName('저장됨', 'ok'); nameTimer = setTimeout(() => showName(''), 2000); }
+        } catch { if (request === nameRequest && nameId() === id) showName('저장하지 못했어요. 다시 시도해 주세요', 'error'); }
+        finally { if (nameSaving === name) nameSaving = null; }
+      };
+      nameInput.addEventListener('keydown', event => {
+        if (event.isComposing) return;
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (nameSaved !== null) nameInput.value = nameSaved; showName(''); }
+      });
+      nameInput.addEventListener('input', () => { if (nameStatus.dataset.kind === 'error') showName(''); });
+      nameInput.addEventListener('blur', () => { commitName(); });
+      toolbar.addEventListener('keydown', async event => {
+        if (event.isComposing || event.key !== 'Enter' || !event.target.matches('input')) return;
+        event.preventDefault(); event.stopPropagation();
+        if (event.target === size) {
+          const width = normalizeImageWidth(size.value);
+          if (width === '100%' && size.value) { size.setCustomValidity('40~2400 사이의 숫자를 입력하세요.'); size.reportValidity(); return; }
+          size.setCustomValidity(''); updateAttrs({ width });
+        } else if (event.target === nameInput) {
+          await commitName();
+          if (nameStatus.dataset.kind === 'error') return;
+        }
+        closeEditor(); editor.commands.focus();
+      });
       sync();
       return {
         dom, update(updated) { if (updated.type !== currentNode.type) return false; currentNode = updated; sync(); return true; },
-        selectNode() { dom.classList.add('is-selected'); }, deselectNode() { dom.classList.remove('is-selected'); popover.hidden = true; },
+        selectNode() { dom.classList.add('is-selected'); }, deselectNode() { dom.classList.remove('is-selected'); closeEditor(); commitName(); },
         stopEvent(event) { return Boolean(event.target.closest('.memo-image-toolbar,.memo-image-link-popover,.memo-image-caption,.memo-image-resize-handle')); },
         ignoreMutation() { return true; },
       };
     };
   },
 });
-export function extensions({ editable = true, onSlash, bubble } = {}) {
+const BlockLineHeight = Extension.create({
+  name: 'blockLineHeight',
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph', 'heading'],
+      attributes: {
+        lineHeight: {
+          default: null,
+          parseHTML: element => normalizeBlockLineHeight(element.style.lineHeight),
+          renderHTML: attrs => normalizeBlockLineHeight(attrs.lineHeight) ? { style: `line-height:${normalizeBlockLineHeight(attrs.lineHeight)}` } : {},
+        },
+      },
+    }];
+  },
+});
+const FILE_ID = /^[0-9a-fA-F-]{36}$/;
+export function formatFileSize(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+// 첨부파일 카드: 본문에 파일명·크기와 다운로드 링크를 넣는다. 파일 자체는 서버(MemoFile)에 보관된다.
+export const FileAttachment = Node.create({
+  name: 'fileAttachment', group: 'block', atom: true, selectable: true, draggable: true,
+  addAttributes() {
+    return {
+      id: { default: '', parseHTML: el => el.dataset.fileId || '' },
+      name: { default: '', parseHTML: el => el.dataset.fileName || '' },
+      size: { default: 0, parseHTML: el => Number(el.dataset.fileSize) || 0 },
+    };
+  },
+  parseHTML() { return [{ tag: 'div[data-file-attachment]' }]; },
+  renderHTML({ node }) {
+    const id = FILE_ID.test(node.attrs.id) ? node.attrs.id : '';
+    const name = String(node.attrs.name || '첨부파일');
+    const size = Number(node.attrs.size) || 0;
+    return ['div', { 'data-file-attachment': '', 'data-file-id': id, 'data-file-name': name, 'data-file-size': String(size), class: 'memo-file-card', contenteditable: 'false' },
+      ['a', { href: id ? `/memo-files/${id}/` : '#', download: name, rel: 'noopener noreferrer' },
+        ['span', { class: 'memo-file-icon', 'aria-hidden': 'true' }, '📎'],
+        ['span', { class: 'memo-file-name' }, name],
+        ['span', { class: 'memo-file-size' }, formatFileSize(size)]]];
+  },
+});
+export function extensions({ editable = true, onSlash, bubble, imageName = null } = {}) {
   const list = [
     StarterKit.configure({ heading: { levels: [2, 3, 4] }, link: { openOnClick: !editable, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' }, protocols: ['http', 'https'] } }),
-    CaptionImage.configure({ allowBase64: true, openLinks: !editable, editable }),
+    CaptionImage.configure({ allowBase64: true, openLinks: !editable, editable, imageName }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }), TextStyleKit,
     Highlight.configure({ multicolor: true }), TaskList, TaskItem.configure({ nested: true }),
-    TableKit.configure({ table: { resizable: false } }),
+    TableKit.configure({ table: { resizable: true, cellMinWidth: 90, handleWidth: 6 } }), BlockLineHeight, FileAttachment,
   ];
   if (editable) {
     list.push(Placeholder.configure({ placeholder: '떠오른 생각을 적어 보세요. / 를 누르면 블록을 추가할 수 있어요.' }));
@@ -192,9 +344,29 @@ export function extensions({ editable = true, onSlash, bubble } = {}) {
         onSlash?.(); return true;
       },
     }; } }));
-    if (bubble) list.push(BubbleMenu.configure({ element: bubble, options: { placement: 'top', offset: 9 }, shouldShow: ({ editor, from, to }) => editor.isEditable && from !== to && !document.querySelector('dialog[open]') }));
+    if (bubble) list.push(BubbleMenu.configure({ element: bubble, options: { placement: 'top', offset: 9 }, shouldShow: ({ editor, from, to }) => editor.isEditable && !(editor.state.selection instanceof NodeSelection) && from !== to && !document.querySelector('dialog[open]') }));
   }
   return list;
+}
+export function selectedBlockLineHeight(editor) {
+  if (!editor || editor.isDestroyed) return null;
+  const { from, to } = editor.state.selection; const values = new Set();
+  editor.state.doc.nodesBetween(from, to, node => {
+    if (['paragraph', 'heading'].includes(node.type.name)) values.add(node.attrs.lineHeight || '1.85');
+  });
+  return values.size === 1 ? [...values][0] : null;
+}
+export function setBlockLineHeight(editor, value) {
+  const normalized = normalizeBlockLineHeight(value);
+  if (!editor || editor.isDestroyed || !normalized) return false;
+  const { from, to } = editor.state.selection; const tr = editor.state.tr; let changed = false;
+  editor.state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!['paragraph', 'heading'].includes(node.type.name)) return;
+    if ((node.attrs.lineHeight || '1.85') === normalized) return;
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, lineHeight: normalized }); changed = true;
+  });
+  if (!changed) return true;
+  editor.view.dispatch(tr.scrollIntoView()); return true;
 }
 export function createMemoEditor(options) {
   return new Editor({
@@ -202,16 +374,9 @@ export function createMemoEditor(options) {
     editable: options.editable !== false,
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': options.editable === false ? '메모 본문 읽기' : '메모 본문', 'aria-multiline': 'true', spellcheck: 'true' },
-      handlePaste: (view, event, slice) => {
-        if (options.editable === false) return false;
-        const files = [...(event.clipboardData?.files || [])];
-        const itemFile = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type?.startsWith('image/'))?.getAsFile?.();
-        const file = files.find(candidate => candidate.type?.startsWith('image/')) || (itemFile?.type?.startsWith('image/') ? itemFile : null);
-        const html = event.clipboardData?.getData('text/html') || '';
-        if (file && options.onPaste) { event.preventDefault(); options.onPaste({ file, html }); return true; }
-        if (html && /<img[\s>]/i.test(html) && options.onPaste) { event.preventDefault(); options.onPaste({ html }); return true; }
-        const textStyle = view.state.schema.marks.textStyle;
-        if (!slice || !textStyle) return false;
+      transformPasted: slice => {
+        const textStyle = slice.content.firstChild?.type.schema.marks.textStyle;
+        if (!textStyle) return slice;
         const whiten = fragment => {
           const nodes = [];
           fragment.forEach(node => {
@@ -224,9 +389,17 @@ export function createMemoEditor(options) {
           });
           return Fragment.fromArray(nodes);
         };
-        event.preventDefault();
-        view.dispatch(view.state.tr.replaceSelection(new Slice(whiten(slice.content), slice.openStart, slice.openEnd)).scrollIntoView());
-        return true;
+        return new Slice(whiten(slice.content), slice.openStart, slice.openEnd);
+      },
+      handlePaste: (_view, event, _slice) => {
+        if (options.editable === false) return false;
+        const files = [...(event.clipboardData?.files || [])];
+        const itemFile = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type?.startsWith('image/'))?.getAsFile?.();
+        const file = files.find(candidate => candidate.type?.startsWith('image/')) || (itemFile?.type?.startsWith('image/') ? itemFile : null);
+        const html = event.clipboardData?.getData('text/html') || '';
+        if (file && options.onPaste) { event.preventDefault(); options.onPaste({ file, html }); return true; }
+        if (html && /<img[\s>]/i.test(html) && options.onPaste) { event.preventDefault(); options.onPaste({ html }); return true; }
+        return false;
       },
       handleDrop: (_view, event, _slice, moved) => {
         if (moved || options.editable === false) return false;

@@ -1,4 +1,5 @@
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, UserCreationForm
+from django.core.exceptions import ValidationError
 
 
 class MemoAuthenticationForm(AuthenticationForm):
@@ -17,12 +18,34 @@ class MemoUserCreationForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Temporary test-period relaxation: accept arbitrary ID characters and
+        # weak passwords. Keep the database-backed username length limit.
+        self.fields["username"].validators = []
+        self.fields["username"].help_text = "150자 이하로 입력하세요. 이미 사용 중인 ID는 사용할 수 없습니다."
+        self.fields["password1"].help_text = "테스트 기간에는 짧거나 단순한 비밀번호도 사용할 수 있습니다."
         self.fields["username"].label = "사용자 이름"
         self.fields["username"].widget.attrs.update({"autocomplete": "username", "autofocus": True})
         self.fields["password1"].label = "비밀번호"
         self.fields["password1"].widget.attrs["autocomplete"] = "new-password"
         self.fields["password2"].label = "비밀번호 확인"
         self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
+
+    def _get_validation_exclusions(self):
+        # The built-in User model adds a username-character validator during
+        # model validation; username syntax is intentionally unrestricted here.
+        return super()._get_validation_exclusions() | {"username"}
+
+    def clean_username(self):
+        # Preserve unique IDs while allowing case variants during testing.
+        username = self._meta.model.normalize_username(self.cleaned_data["username"])
+        if self._meta.model._default_manager.filter(username=username).exists():
+            raise ValidationError(self.instance.unique_error_message(self._meta.model, ["username"]))
+        return username
+
+    def validate_password_for_user(self, user, password_field_name="password2"):
+        # Password confirmation remains required, but configured strength
+        # validators are bypassed on account creation for the test period.
+        return
 
 
 class MemoPasswordChangeForm(PasswordChangeForm):
