@@ -539,3 +539,28 @@ test('standalone preview embeds exactly the built code without replacement-strin
   assert.match(html, /\.\/assets\/favicon\.svg/);
   assert.doesNotMatch(html, /<script[^>]+src=/);
 });
+
+test('voice dictation inserts spoken text and camera input is wired for photos', async () => {
+  const ctx = await boot(new IDBFactory(), 'voiceCameraTest');
+  try {
+    const camera = ctx.d.querySelector('#camera-file');
+    assert.equal(camera.getAttribute('capture'), 'environment');
+    assert.match(camera.accept, /image/);
+    let started = 0, instance = null;
+    ctx.w.SpeechRecognition = class { constructor() { instance = this; } start() { started++; } stop() { this.stopped = true; } };
+    click(ctx, '[data-action="new"]');
+    await waitFor(() => ctx.d.querySelector('#document-title').value === '', 'new note ready');
+    ctx.d.querySelector('#editor [contenteditable="true"]').focus();
+    click(ctx, '[data-action="voice"]');
+    await delay(0);
+    assert.equal(started, 1);
+    assert.equal(instance.lang, 'ko-KR');
+    assert.equal(ctx.d.querySelector('[data-action="voice"]').getAttribute('aria-pressed'), 'true');
+    const part = (text, isFinal) => Object.assign([{ transcript: text }], { isFinal });
+    instance.onresult({ resultIndex: 0, results: [part('음성으로 쓴 문장', true)] });
+    await waitFor(() => ctx.d.querySelector('#editor').textContent.includes('음성으로 쓴 문장'), 'spoken text inserted');
+    instance.onerror({ error: 'not-allowed' });
+    assert.equal(ctx.d.querySelector('[data-action="voice"]').getAttribute('aria-pressed'), 'false');
+    assert.equal(ctx.errors.length, 0, ctx.errors.join('\n'));
+  } finally { ctx.close(); }
+});

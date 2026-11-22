@@ -6,8 +6,9 @@ import './user-menu.js';
 import './visibility.css';
 import Alpine from 'alpinejs';
 import htmx from 'htmx.org';
-import { createIcons, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties } from 'lucide';
+import { createIcons, Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties } from 'lucide';
 import { createAdapter } from './adapters.js';
+import { downscaleImage, speechCtor, finalTranscript, speechErrorMessage } from './capture.js';
 import { createMemoEditor, plainText, findImageInfo, safeImage, normalizeImageAttrs, normalizeYouTubeURL, youtubeURLFromThumbnail, moveBlock, normalizeBlockLineHeight, selectedBlockLineHeight, setBlockLineHeight } from './editor.js';
 import { CellSelection, TableMap, selectedRect } from '@tiptap/pm/tables';
 import { loadConfig, ConfigStore } from './configLoader.js';
@@ -15,7 +16,7 @@ import { localDate, newDocument, p } from './sample-data.js';
 import { createMasonry } from './masonry.js';
 import { hasDuplicateNotebookName, normalizeNotebookName } from './notebook-name.js';
 
-const iconSet = { NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties };
+const iconSet = { Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties };
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
@@ -306,6 +307,7 @@ function renderMetadata() {
   $('cover-container').innerHTML = cover ? `<img src="${escapeHTML(cover)}" alt="메모 표지"><button class="button secondary" data-action="remove-cover">표지 제거</button>` : '';
 }
 async function openNote(id, targetView = 'editor') {
+  if (voice.active) stopVoice();
   if (!(await ensureSaved())) return;
   const found = notes.find(n => n.id === id && !n.deleted);
   if (!found) { toast('기록을 찾지 못했어요.'); return; }
@@ -342,6 +344,7 @@ async function createNote(daily = false) {
   $('document-title').focus();
 }
 async function changeView(next, save = true) {
+  if (voice.active && next !== 'editor') stopVoice();
   if (save && !(await ensureSaved())) return false;
   if (next === 'editor' && !current) { await createNote(); return true; }
   if (view === 'blog') blogScroll = scrollY;
@@ -451,7 +454,7 @@ async function applyFilter(next, value = '') {
   blogScroll = 0; blogCards = []; blogCursor = null; renderNavigation(); await changeView('blog', false);
 }
 const insertItems = [
-  ['image', '사진', '사진과 함께 기억하기', 'image'], ['file', '파일 첨부', '문서·압축 파일 20MB까지', 'paperclip'], ['taskList', '체크리스트', '오늘의 할 일', 'list-todo'],
+  ['camera', '사진 촬영', '카메라로 바로 찍어 올리기', 'camera'], ['voice', '음성 입력', '말하는 대로 받아 적기', 'mic'], ['image', '사진', '사진과 함께 기억하기', 'image'], ['file', '파일 첨부', '문서·압축 파일 20MB까지', 'paperclip'], ['taskList', '체크리스트', '오늘의 할 일', 'list-todo'],
   ['h2', '제목', '문단을 나누는 제목', 'file-text'], ['bulletList', '글머리 목록', '생각을 차례로 정리', 'list'],
   ['orderedList', '번호 목록', '순서가 있는 기록', 'list'], ['blockquote', '인용문', '기억하고 싶은 한 문장', 'quote'],
   ['horizontalRule', '구분선', '잠깐 쉬어 가기', 'minus'], ['codeBlock', '코드 블록', '개발 메모 남기기', 'code'],
@@ -513,12 +516,44 @@ function execute(command) {
 async function prepareImage(file, purpose) {
   if (!current || !file) return;
   imagePurpose = purpose; rememberSelection();
+  if (file.size > 5 * 1024 * 1024) file = await downscaleImage(file);
   if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type) || file.size > 5 * 1024 * 1024) { toast('5MB 이하의 JPG, PNG, WebP, GIF 사진을 선택해 주세요.'); return; }
   toast(adapter.mode === 'demo' ? '사진을 이 기기에 넣을 준비 중이에요…' : '사진을 업로드하고 있어요…');
   const uploaded = await adapter.upload(file);
   if (!safeImage(uploaded.url)) throw new Error('사용할 수 없는 이미지 주소예요.');
   pendingImage = uploaded; $('image-preview').src = uploaded.url; $('image-alt').value = ''; $('image-caption').value = '';
   showDialog('image-dialog', 'image-alt');
+}
+// 음성 입력: 브라우저(Web Speech API)의 한국어 받아쓰기를 본문(또는 제목)에 이어 적는다.
+let voice = { rec: null, active: false, target: null }, lastEditable = null;
+document.addEventListener('focusin', event => { const t = event.target; if (t?.id === 'document-title' || t?.closest?.('#editor')) lastEditable = t.id === 'document-title' ? 'title' : 'body'; });
+function setVoiceUi(on) {
+  document.querySelectorAll('[data-action="voice"]').forEach(button => { button.classList.toggle('listening', on); button.setAttribute('aria-pressed', String(on)); });
+}
+function stopVoice() { voice.active = false; setVoiceUi(false); try { voice.rec?.stop(); } catch {} voice.rec = null; }
+function insertSpoken(text) {
+  if (!text || !current) return;
+  if (voice.target === 'title') {
+    const el = $('document-title'); el.value = `${el.value}${el.value && !/\s$/.test(el.value) ? ' ' : ''}${text}`.slice(0, el.maxLength > 0 ? el.maxLength : 200);
+    el.dispatchEvent(new Event('input', { bubbles: true })); return;
+  }
+  editor.chain().focus().insertContent(`${text} `).run();
+}
+function toggleVoice() {
+  if (voice.active) { stopVoice(); toast('음성 입력을 껐어요.'); return; }
+  const Ctor = speechCtor(window);
+  if (!Ctor) { toast('이 브라우저는 음성 입력을 지원하지 않아요. 안드로이드 Chrome에서 사용해 주세요.'); return; }
+  if (!current || view !== 'editor') { toast('메모를 연 상태에서 사용해 주세요.'); return; }
+  const rec = new Ctor(); rec.lang = 'ko-KR'; rec.continuous = true; rec.interimResults = false; rec.maxAlternatives = 1;
+  voice = { rec, active: true, target: lastEditable === 'title' ? 'title' : 'body' };
+  rec.onresult = event => insertSpoken(finalTranscript(event));
+  rec.onerror = event => {
+    const message = speechErrorMessage(event.error);
+    if (message) { toast(message); stopVoice(); }
+  };
+  // 잠깐 조용하면 브라우저가 스스로 끝내므로, 사용자가 끄기 전까지는 다시 시작한다.
+  rec.onend = () => { if (voice.active && voice.rec === rec) { try { rec.start(); } catch { stopVoice(); } } };
+  try { rec.start(); setVoiceUi(true); toast('듣고 있어요. 말씀해 주세요. (다시 누르면 종료)'); } catch { stopVoice(); toast('음성 입력을 시작하지 못했어요.'); }
 }
 const ATTACHMENT_EXT = /\.(pdf|docx?|xlsx?|pptx?|hwpx?|txt|csv|md|rtf|od[tsp]|zip|7z)$/i;
 async function attachFile(file) {
@@ -535,6 +570,7 @@ async function attachFile(file) {
   toast('파일을 첨부했어요.');
 }
 function chooseAttachment() { rememberSelection(); $('attachment-file').value = ''; $('attachment-file').click(); }
+function chooseCamera() { imagePurpose = 'body'; rememberSelection(); $('camera-file').value = ''; $('camera-file').click(); }
 function chooseImage(purpose) { imagePurpose = purpose; rememberSelection(); $('image-file').value = ''; $('image-file').click(); }
 function findExternalImageSources(doc) {
   const sources = [];
@@ -727,6 +763,7 @@ const actions = {
   home: () => changeView('blog'), new: () => createNote(), today: () => createNote(true), save: saveAndOpenBlog,
   read: () => changeView('reader'), edit: () => changeView('editor'), 'back-blog': () => changeView('blog'),
   search: async () => { if (await changeView('blog')) $('blog-search').focus(); }, insert: openInsert,
+  camera: chooseCamera, voice: () => toggleVoice(),
   'image-edit': () => {
     if (!editor?.isActive('image')) return;
     const imageNode = editor.view.nodeDOM(editor.state.selection.from);
@@ -790,7 +827,7 @@ document.addEventListener('click', event => {
   else if (button.dataset.cardFavorite) run(() => updateStoredNote(button.dataset.cardFavorite, { favorite: !notes.find(n => n.id === button.dataset.cardFavorite).favorite }));
   else if (button.dataset.restore) run(async () => { await updateStoredNote(button.dataset.restore, { deleted: false }); toast('기록을 복원했어요.'); });
   else if (button.dataset.layout) { const compact = button.dataset.layout === 'compact'; $('blog-feed').classList.toggle('compact', compact); document.querySelectorAll('[data-layout]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); }); blogMasonry?.layout(); }
-  else if (button.dataset.insert) { $('insert-dialog').close(); restoreSelection(); if (button.dataset.insert === 'image') chooseImage('body'); else if (button.dataset.insert === 'file') chooseAttachment(); else execute(button.dataset.insert); }
+  else if (button.dataset.insert) { $('insert-dialog').close(); restoreSelection(); if (button.dataset.insert === 'image') chooseImage('body'); else if (button.dataset.insert === 'camera') chooseCamera(); else if (button.dataset.insert === 'voice') toggleVoice(); else if (button.dataset.insert === 'file') chooseAttachment(); else execute(button.dataset.insert); }
 });
 // Prevent formatting buttons from collapsing an existing text selection.
 document.addEventListener('mousedown', event => { if (event.target.closest('[data-command], [data-cell-action], .line-height-control button, #bubble-menu [data-action=link]')) event.preventDefault(); });
@@ -841,6 +878,7 @@ $('blog-load-more').addEventListener('click', () => run(() => renderBlog(false))
 $('clear-month').addEventListener('click', () => { $('month-filter').value = ''; run(() => renderBlog(true)); });
 $('insert-search').addEventListener('input', renderInsert);
 $('attachment-file').addEventListener('change', event => run(() => attachFile(event.target.files[0])));
+$('camera-file').addEventListener('change', event => run(async () => { const file = event.target.files[0]; if (file) await prepareImage(await downscaleImage(file), 'body'); }));
 $('image-file').addEventListener('change', event => run(() => prepareImage(event.target.files[0], imagePurpose)));
 $('link-form').addEventListener('submit', event => {
   event.preventDefault(); const value = $('link-url').value.trim();
