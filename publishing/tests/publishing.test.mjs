@@ -564,3 +564,15 @@ test('voice dictation inserts spoken text and camera input is wired for photos',
     assert.equal(ctx.errors.length, 0, ctx.errors.join('\n'));
   } finally { ctx.close(); }
 });
+
+test('background music bar is offered per memo and explains the server-only limit in demo mode', async () => {
+  const ctx = await boot(new IDBFactory(), 'musicBarTest');
+  try {
+    const bars = ctx.d.querySelectorAll('.music-bar');
+    assert.equal(bars.length, 2, 'editor and reader bars');
+    assert.match(ctx.d.querySelector('#editor-view .music-bar').textContent, /배경음악 추가/);
+    click(ctx, '#editor-view .music-bar [data-music="pick"]');
+    await waitFor(() => /서버/.test(ctx.d.querySelector('#toast')?.textContent || ''), 'server-only toast');
+    assert.equal(ctx.errors.length, 0, ctx.errors.join('\n'));
+  } finally { ctx.close(); }
+});

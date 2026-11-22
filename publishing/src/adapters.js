@@ -136,6 +136,8 @@ class BrowserAdapter {
     });
   }
   async uploadFile() { throw new StoreError('파일 첨부는 서버에 연결된 환경에서만 사용할 수 있어요.'); }
+  async uploadMusic() { throw new StoreError('배경음악은 서버에 연결된 환경에서만 사용할 수 있어요.'); }
+  async deleteMusic() { throw new StoreError('배경음악은 서버에 연결된 환경에서만 사용할 수 있어요.'); }
   async upload(file) {
     if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) throw new StoreError('JPG, PNG, WebP, GIF 사진을 선택해 주세요.');
     if (file.size > 5 * 1024 * 1024) throw new StoreError('데모에서는 5MB 이하의 사진을 사용할 수 있어요.');
@@ -195,6 +197,8 @@ class DjangoAdapter {
   async deleteNotebook(id) { return this.request(`/notebooks/${encodeURIComponent(id)}/delete/`, { method: 'DELETE' }); }
   async upload(file) { const body = new FormData(); body.append('file', file); return this.request('/images/', { method: 'POST', body }); }
   async uploadFile(file) { const body = new FormData(); body.append('file', file); return this.request('/files/', { method: 'POST', body }); }
+  async uploadMusic(noteId, file) { const body = new FormData(); body.append('file', file); return this.request(`/notes/${encodeURIComponent(noteId)}/music/`, { method: 'POST', body }); }
+  async deleteMusic(noteId) { return this.request(`/notes/${encodeURIComponent(noteId)}/music/`, { method: 'DELETE' }); }
   async importImage(url) { return this.request('/images/import/', { method: 'POST', body: JSON.stringify({ url }) }); }
   /**
    * Retrieve image metadata from the server.

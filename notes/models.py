@@ -37,6 +37,7 @@ class Note(models.Model):
     plain_text = models.TextField(blank=True)
     icon = models.CharField(max_length=16, blank=True)
     cover = models.CharField(max_length=200, null=True, blank=True)
+    music = models.ForeignKey("MemoFile", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

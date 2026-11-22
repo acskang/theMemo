@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -238,20 +238,27 @@ def notebook_json(item):
     return {"id": str(item.id), "name": item.name}
 
 
+def music_json(item):
+    music = item.music
+    if not music:
+        return None
+    return {"id": str(music.id), "name": music.original_name, "size": music.size, "url": f"/api/memo/notes/{item.id}/music/"}
+
+
 def note_json(item):
     return {
         "id": str(item.id), "title": item.title, "notebook_id": str(item.notebook_id), "tags": item.tags,
         "document_date": item.document_date.isoformat(), "daily_key": item.daily_key.isoformat() if item.daily_key else None,
         "favorite": item.favorite, "deleted": item.deleted, "is_public": item.is_public, "schema_version": item.schema_version,
         "revision": item.revision, "content": item.content, "plain_text": item.plain_text, "icon": item.icon,
-        "cover": item.cover, "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat(),
+        "cover": item.cover, "music": music_json(item), "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat(),
     }
 
 
 @require_GET
 @api_login_required
 def notes_list(request):
-    return JsonResponse({"items": [note_json(item) for item in Note.objects.filter(owner=request.user).select_related("notebook")]})
+    return JsonResponse({"items": [note_json(item) for item in Note.objects.filter(owner=request.user).select_related("notebook", "music")]})
 
 
 @require_GET
@@ -270,7 +277,7 @@ def note_save(request, note_id):
     if request.method == "GET":
         # Return the note if it exists for the authenticated user.
         try:
-            note = Note.objects.select_related("notebook").get(id=note_id, owner=request.user)
+            note = Note.objects.select_related("notebook", "music").get(id=note_id, owner=request.user)
         except Note.DoesNotExist:
             return error("not_found", "메모를 찾을 수 없습니다.", 404)
         return JsonResponse(note_json(note))
@@ -574,6 +581,107 @@ def file_serve(request, file_id):
     response["Content-Disposition"] = f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(item.original_name)}"
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "private, no-store"
+    return response
+
+
+MUSIC_MAX_BYTES = 30 * 1024 * 1024
+MUSIC_TYPES = {
+    ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac", ".ogg": "audio/ogg", ".oga": "audio/ogg",
+    ".opus": "audio/ogg", ".wav": "audio/wav", ".flac": "audio/flac", ".weba": "audio/webm",
+}
+
+
+def _iter_file_range(handle, start, length, chunk=64 * 1024):
+    try:
+        handle.seek(start)
+        remaining = length
+        while remaining > 0:
+            data = handle.read(min(chunk, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+    finally:
+        handle.close()
+
+
+def _parse_range(header, size):
+    """'bytes=start-end' 한 구간만 지원한다. 올바르지 않으면 None."""
+    import re
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", (header or "").strip())
+    if not match or (not match.group(1) and not match.group(2)):
+        return None
+    if match.group(1):
+        start = int(match.group(1)); end = int(match.group(2)) if match.group(2) else size - 1
+    else:
+        start = max(size - int(match.group(2)), 0); end = size - 1
+    end = min(end, size - 1)
+    if start > end or start >= size:
+        return None
+    return start, end
+
+
+def _delete_music(note):
+    music = note.music
+    if not music:
+        return
+    note.music = None
+    note.save(update_fields=["music"])
+    music.file.delete(save=False)
+    music.delete()
+
+
+@require_http_methods(["GET", "POST", "DELETE"])
+@api_login_required
+def note_music(request, note_id):
+    try:
+        note = Note.objects.select_related("music").get(id=note_id, owner=request.user)
+    except Note.DoesNotExist:
+        return error("not_found", "메모를 찾을 수 없습니다. 먼저 저장해 주세요.", 404)
+    if request.method == "DELETE":
+        _delete_music(note)
+        return JsonResponse({"music": None})
+    if request.method == "POST":
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            return error("missing_file", "음악 파일을 선택해 주세요.")
+        if uploaded.size == 0:
+            return error("empty_file", "빈 파일은 등록할 수 없습니다.")
+        if uploaded.size > MUSIC_MAX_BYTES:
+            return error("file_too_large", "음악 파일은 30MB 이하여야 합니다.", 413)
+        name = Path(uploaded.name).name.replace("\x00", "").strip()[:255]
+        suffix = Path(name).suffix.lower()
+        if not name or suffix not in MUSIC_TYPES:
+            return error("unsupported_file", "MP3, M4A, AAC, OGG, WAV, FLAC 음악 파일만 등록할 수 있습니다.")
+        item = MemoFile(owner=request.user, original_name=name, content_type=MUSIC_TYPES[suffix], size=uploaded.size)
+        item.file.save(f"music{suffix}", uploaded, save=True)
+        _delete_music(note)  # 메모당 음악 한 곡: 기존 곡은 교체한다.
+        note.music = item
+        note.save(update_fields=["music"])
+        return JsonResponse({"music": music_json(note)}, status=201)
+    # GET: 재생용 스트리밍 (Range 지원: 탐색·모바일 재생에 필요)
+    music = note.music
+    if not music:
+        return error("not_found", "등록된 음악이 없습니다.", 404)
+    size = music.file.size
+    content_type = music.content_type or "application/octet-stream"
+    header = request.headers.get("Range")
+    rng = _parse_range(header, size) if header else None
+    if header and rng is None:
+        response = HttpResponse(status=416)
+        response["Content-Range"] = f"bytes */{size}"
+        return response
+    if rng:
+        start, end = rng
+        response = StreamingHttpResponse(_iter_file_range(music.file.open("rb"), start, end - start + 1), status=206, content_type=content_type)
+        response["Content-Range"] = f"bytes {start}-{end}/{size}"
+        response["Content-Length"] = str(end - start + 1)
+    else:
+        response = StreamingHttpResponse(_iter_file_range(music.file.open("rb"), 0, size), content_type=content_type)
+        response["Content-Length"] = str(size)
+    response["Accept-Ranges"] = "bytes"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, max-age=3600"
     return response
 
 

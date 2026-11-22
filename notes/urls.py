@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/memo/notes/", views.notes_list, name="notes-list"),
     path("api/memo/cards/", views.note_cards, name="note-cards"),
     path("api/memo/notes/<uuid:note_id>/", views.note_save, name="note-save"),
+    path("api/memo/notes/<uuid:note_id>/music/", views.note_music, name="note-music"),
     path("api/memo/notebooks/", views.notebooks_list, name="notebooks-list"),
     # New notebook management routes
     path("api/memo/notebooks/<uuid:notebook_id>/delete/", views.delete_notebook, name="notebook-delete"),

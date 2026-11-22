@@ -6,8 +6,9 @@ import './user-menu.js';
 import './visibility.css';
 import Alpine from 'alpinejs';
 import htmx from 'htmx.org';
-import { createIcons, Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties } from 'lucide';
+import { createIcons, Music, Play, Pause, Volume2, Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties } from 'lucide';
 import { createAdapter } from './adapters.js';
+import { clampVolume, loadVolume, saveVolume, validateMusicFile, trackLabel, MUSIC_ACCEPT } from './music.js';
 import { downscaleImage, speechCtor, finalTranscript, speechErrorMessage } from './capture.js';
 import { createMemoEditor, plainText, findImageInfo, safeImage, normalizeImageAttrs, normalizeYouTubeURL, youtubeURLFromThumbnail, moveBlock, normalizeBlockLineHeight, selectedBlockLineHeight, setBlockLineHeight } from './editor.js';
 import { CellSelection, TableMap, selectedRect } from '@tiptap/pm/tables';
@@ -16,7 +17,7 @@ import { localDate, newDocument, p } from './sample-data.js';
 import { createMasonry } from './masonry.js';
 import { hasDuplicateNotebookName, normalizeNotebookName } from './notebook-name.js';
 
-const iconSet = { Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties };
+const iconSet = { Music, Play, Pause, Volume2, Mic, Camera, NotebookPen, PanelLeft, Search, Plus, CalendarDays, Files, Star, Folder, FolderOpen, Trash2, Settings2, LockKeyhole, Maximize2, Eye, Undo2, Redo2, Highlighter, AlignLeft, List, ListTodo, Link, ChevronDown, PanelRight, ImagePlus, Smile, X, Clock3, LayoutList, ArrowLeft, Download, SquarePen, BookOpenText, Image, Quote, Minus, Code, Table, ArrowUp, ArrowDown, Rows3, Columns3, Check, FileText, Inbox, Paperclip, Combine, Images, Minimize2, MoveHorizontal, TableProperties };
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
@@ -319,7 +320,7 @@ async function openNote(id, targetView = 'editor') {
     onPaste: payload => run(() => pasteIntoEditor(payload)),
     onUpdate: touch, onSelectionUpdate: updateToolbar, onTransaction: updateToolbar,
   });
-  loading = false; renderMetadata(); updateCount(); updateOutline(); updateToolbar(); refreshImageRecovery();
+  loading = false; renderMetadata(); updateMusic(); updateCount(); updateOutline(); updateToolbar(); refreshImageRecovery();
   savedStatus('saved', `${adapter.mode === 'demo' ? '이 기기에 저장됨' : '서버 저장됨'} · ${time(current.updated_at)}`);
   await changeView(targetView, false); autoHeight(); ui().drawer = false;
   if (targetView === 'editor') scrollTo({ top: 0 });
@@ -345,6 +346,7 @@ async function createNote(daily = false) {
 }
 async function changeView(next, save = true) {
   if (voice.active && next !== 'editor') stopVoice();
+  if (next === 'blog') { stopMusic(); musicNoteId = null; }
   if (save && !(await ensureSaved())) return false;
   if (next === 'editor' && !current) { await createNote(); return true; }
   if (view === 'blog') blogScroll = scrollY;
@@ -554,6 +556,96 @@ function toggleVoice() {
   // 잠깐 조용하면 브라우저가 스스로 끝내므로, 사용자가 끄기 전까지는 다시 시작한다.
   rec.onend = () => { if (voice.active && voice.rec === rec) { try { rec.start(); } catch { stopVoice(); } } };
   try { rec.start(); setVoiceUi(true); toast('듣고 있어요. 말씀해 주세요. (다시 누르면 종료)'); } catch { stopVoice(); toast('음성 입력을 시작하지 못했어요.'); }
+}
+// 메모별 배경음악: 메모당 한 곡을 등록하고, 그 메모를 열어 둔 동안 반복 재생·정지·음량 조절을 한다.
+const musicAudio = new Audio(); musicAudio.loop = true; musicAudio.preload = 'none';
+let musicVolume = loadVolume(), musicNoteId = null, musicSrc = '';
+musicAudio.volume = musicVolume;
+const musicBars = [];
+function buildMusicBar(anchor, position) {
+  const bar = document.createElement('div'); bar.className = 'music-bar'; bar.hidden = false;
+  anchor.insertAdjacentElement(position, bar); musicBars.push(bar);
+  bar.addEventListener('click', event => {
+    const button = event.target.closest('[data-music]'); if (!button) return;
+    const action = button.dataset.music;
+    if (action === 'toggle') run(toggleMusic); else if (action === 'pick') pickMusic(); else if (action === 'remove') run(removeMusic);
+  });
+  bar.addEventListener('input', event => {
+    if (event.target.dataset?.music !== 'volume') return;
+    musicVolume = clampVolume(Number(event.target.value) / 100); musicAudio.volume = musicVolume; saveVolume(musicVolume);
+    musicBars.forEach(b => { const range = b.querySelector('[data-music="volume"]'); if (range && range !== event.target) range.value = String(Math.round(musicVolume * 100)); });
+  });
+  return bar;
+}
+function renderMusic() {
+  const music = current?.music;
+  const playing = !musicAudio.paused;
+  const html = music
+    ? `<button type="button" class="music-play" data-music="toggle" aria-label="${playing ? '배경음악 정지' : '배경음악 재생'}" aria-pressed="${playing}">${icon(playing ? 'pause' : 'play')}</button><span class="music-name" title="${escapeHTML(music.name)}">${icon('music')}<span>${escapeHTML(trackLabel(music.name))}</span></span><label class="music-volume">${icon('volume-2')}<input type="range" min="0" max="100" step="1" value="${Math.round(musicVolume * 100)}" data-music="volume" aria-label="음량"></label><button type="button" class="music-tool" data-music="pick" aria-label="음악 바꾸기" title="음악 바꾸기">${icon('folder-open')}</button><button type="button" class="music-tool" data-music="remove" aria-label="음악 삭제" title="음악 삭제">${icon('trash-2')}</button>`
+    : `<button type="button" class="music-add" data-music="pick">${icon('music')}<span>배경음악 추가</span></button>`;
+  musicBars.forEach(bar => { bar.hidden = !current; bar.classList.toggle('has-music', Boolean(music)); bar.innerHTML = html; });
+  refreshIcons();
+}
+function syncMusicSource() {
+  const id = current?.id || null, src = current?.music?.url || '';
+  if (id === musicNoteId && src === musicSrc) return;
+  const wasPlaying = !musicAudio.paused && id === musicNoteId, hadSrc = Boolean(musicSrc);
+  musicNoteId = id; musicSrc = src;
+  if (!src && !hadSrc) return;
+  if (!musicAudio.paused) musicAudio.pause();
+  if (src) { musicAudio.src = src; musicAudio.load(); } else { musicAudio.removeAttribute('src'); musicAudio.load(); }
+  if (wasPlaying && src) musicAudio.play().catch(() => {});
+}
+function updateMusic() { syncMusicSource(); renderMusic(); }
+function stopMusic() { if (musicAudio.paused) return; musicAudio.pause(); try { musicAudio.currentTime = 0; } catch {} }
+async function toggleMusic() {
+  if (!current?.music) return;
+  if (!musicAudio.paused) { musicAudio.pause(); return; }
+  try { await musicAudio.play(); } catch { toast('음악을 재생하지 못했어요. 파일 형식이나 네트워크를 확인해 주세요.'); }
+}
+function pickMusic() {
+  if (!current) return;
+  if (adapter.mode === 'demo') { toast('배경음악은 로그인한 서버 환경에서만 사용할 수 있어요.'); return; }
+  const input = $('music-file'); input.value = ''; input.click();
+}
+async function ensurePersisted() {
+  if (!current) return false;
+  if (current.revision === 0) { editVersion++; savedStatus('pending', '저장 대기'); }
+  if (!(await saveCurrent())) return false;
+  return current.revision > 0;
+}
+async function uploadMusic(file) {
+  const problem = validateMusicFile(file);
+  if (problem) { toast(problem); return; }
+  if (!(await ensurePersisted())) { toast('메모를 먼저 저장한 뒤 음악을 등록해 주세요.'); return; }
+  const noteId = current.id;
+  toast('음악을 업로드하고 있어요…');
+  const { music } = await adapter.uploadMusic(noteId, file);
+  if (current?.id !== noteId) return;
+  current.music = music; const stored = notes.find(n => n.id === noteId); if (stored) stored.music = music;
+  updateMusic(); toast('배경음악을 등록했어요. ▶ 를 눌러 재생하세요.');
+}
+async function removeMusic() {
+  if (!current?.music) return;
+  if (!(await confirmAction('이 메모의 배경음악을 삭제할까요?', '삭제'))) return;
+  const noteId = current.id;
+  await adapter.deleteMusic(noteId);
+  if (current?.id !== noteId) return;
+  current.music = null; const stored = notes.find(n => n.id === noteId); if (stored) stored.music = null;
+  updateMusic(); toast('배경음악을 삭제했어요.');
+}
+function initMusic() {
+  const input = document.createElement('input'); input.type = 'file'; input.id = 'music-file'; input.accept = MUSIC_ACCEPT; input.hidden = true; document.body.append(input);
+  input.addEventListener('change', event => run(() => uploadMusic(event.target.files[0])));
+  const editorAnchor = document.querySelector('#editor-view .sheet-options'), readerAnchor = $('reader-date');
+  if (editorAnchor) buildMusicBar(editorAnchor, 'afterend');
+  if (readerAnchor) buildMusicBar(readerAnchor, 'beforebegin');
+  ['play', 'pause', 'ended'].forEach(name => musicAudio.addEventListener(name, renderMusic));
+  musicAudio.addEventListener('error', () => { if (musicSrc) { renderMusic(); toast('배경음악을 불러오지 못했어요.'); } });
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.setActionHandler('play', () => run(toggleMusic)); navigator.mediaSession.setActionHandler('pause', () => musicAudio.pause());
+    musicAudio.addEventListener('play', () => { try { navigator.mediaSession.metadata = new MediaMetadata({ title: trackLabel(current?.music?.name), artist: current?.title || 'theMemo' }); } catch {} });
+  }
 }
 const ATTACHMENT_EXT = /\.(pdf|docx?|xlsx?|pptx?|hwpx?|txt|csv|md|rtf|od[tsp]|zip|7z)$/i;
 async function attachFile(file) {
@@ -988,7 +1080,7 @@ async function init() {
   [notes, notebooks] = await Promise.all([adapter.list(), adapter.notebooks()]);
   new IntersectionObserver(entries => { if (view === 'blog' && entries.some(entry => entry.isIntersecting)) run(() => renderBlog(false)); }, { rootMargin: '500px' }).observe($('blog-feed-sentinel'));
   try { const stored = JSON.parse(localStorage.getItem('smartmemo-ui-prefs')); if (stored && ['17', '19', '21'].includes(stored.bodySize) && typeof stored.autosave === 'boolean') prefs = stored; } catch {}
-  applyPrefs(); renderNavigation();
+  applyPrefs(); renderNavigation(); initMusic();
   $('mode-label').textContent = adapter.mode === 'demo' ? '퍼블리싱 데모 · 이 브라우저에 저장' : '로그인한 나만의 기록';
   if (adapter.mode === 'demo' && 'BroadcastChannel' in window) {
     channel = new BroadcastChannel(config.storageKey);
