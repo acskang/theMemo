@@ -878,7 +878,7 @@ $('blog-load-more').addEventListener('click', () => run(() => renderBlog(false))
 $('clear-month').addEventListener('click', () => { $('month-filter').value = ''; run(() => renderBlog(true)); });
 $('insert-search').addEventListener('input', renderInsert);
 $('attachment-file').addEventListener('change', event => run(() => attachFile(event.target.files[0])));
-$('camera-file').addEventListener('change', event => run(async () => { const file = event.target.files[0]; if (file) await prepareImage(await downscaleImage(file), 'body'); }));
+$('camera-file')?.addEventListener('change', event => run(async () => { const file = event.target.files[0]; if (file) await prepareImage(await downscaleImage(file), 'body'); }));
 $('image-file').addEventListener('change', event => run(() => prepareImage(event.target.files[0], imagePurpose)));
 $('link-form').addEventListener('submit', event => {
   event.preventDefault(); const value = $('link-url').value.trim();
