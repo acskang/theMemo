@@ -32,3 +32,15 @@ dialog{width:min(440px,calc(100% - 32px));max-height:85dvh;margin:auto;backgroun
 .notebook-row{display:flex;align-items:center;gap:2px}.notebook-open{min-width:0;flex:1}.notebook-open>span:not(.nav-count){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.notebook-actions{display:flex;opacity:0;transition:opacity .15s}.notebook-row:hover .notebook-actions,.notebook-row:focus-within .notebook-actions{opacity:1}.notebook-actions .icon-button{width:28px;height:28px}
 .shortcut-editor{display:grid;gap:6px;max-height:230px;overflow:auto}.shortcut-edit-row,.shortcut-add-row{display:flex;align-items:center;gap:8px}.shortcut-edit-row>span{flex:1;font-size:12px}.shortcut-edit-row input{width:145px;min-height:35px;padding:6px 8px;font-size:12px}.shortcut-add-row{margin-top:10px}.shortcut-add-row .text-input{min-height:36px;padding:6px 8px;font-size:12px}.shortcut-add-row select{flex:1}.shortcut-add-row input{width:130px}.shortcut-add-row .button{min-height:36px;padding:6px 10px;font-size:12px}
 .line-height-control{position:relative}.line-height-button{min-width:72px}.line-height-menu{position:absolute;z-index:60;top:calc(100% + 7px);right:0;width:150px;padding:6px 0;background:#172536;color:#d9e4f2;border:1px solid #40566e;border-radius:8px;box-shadow:0 12px 32px #0009}.line-height-menu>button{display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px 13px;font-size:13px;text-align:left}.line-height-menu>button:hover,.line-height-menu>button:focus-visible{background:#21374a}.line-height-menu>button svg{width:15px;height:15px;visibility:hidden}.line-height-menu>button.active{color:var(--accent);background:#19364a}.line-height-menu>button.active svg{visibility:visible}.line-height-custom{margin-top:5px;padding:10px 10px 5px;border-top:1px solid #405066}.line-height-custom label{display:block;margin-bottom:7px;color:#9fb1c5;font-size:11px}.line-height-custom>div{display:flex;align-items:center;gap:5px}.line-height-custom input{width:54px;min-width:0;padding:6px 5px;background:#0e1928;color:var(--text);border:1px solid #40566e;border-radius:5px;font-size:12px}.line-height-custom span{color:var(--muted);font-size:12px}.line-height-custom button{margin-left:auto;padding:6px 8px;border-radius:5px;background:#24536d;color:#dff6ff;font-size:11px}.line-height-custom button:hover{background:#2f6a8a}
+
+/* 스마트폰(갤럭시 S21 등 360px 폭) 터치 대응: 손가락으로 누르기 쉬운 최소 40px 영역 */
+@media(max-width:639px) and (pointer:coarse){
+  .icon-button,.tool,.mobile-menu,.search-trigger,.read-button,#favorite-button{min-width:40px;min-height:40px}
+  .icon-button.small{min-width:36px;min-height:36px}
+  .chip,.filter-chip,.tool-select,.line-height-button,#user-menu-btn{min-height:40px}
+  #breadcrumb-notebook,#display-date,#visibility-select{min-height:36px}
+  .brand{min-height:40px;display:inline-flex;align-items:center}
+  input,select,textarea{font-size:16px}
+  .app-header{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+  .mobile-nav{padding-bottom:env(safe-area-inset-bottom)}
+}
